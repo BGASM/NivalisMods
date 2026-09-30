@@ -1,11 +1,12 @@
 # Nivalis Nights Mods
 
-BepInEx plugins for Nivalis Nights.
+BepInEx plugins for Nivalis Nights, by BGASM.
 
-| Mod | What it does |
-|---|---|
-| [Use Oldest First](mods/NivalisFifo) | Cooks use the oldest ingredients first. |
-| [Manager Order Fix](mods/NivalisOrderFix) | Managers buy what they need and stop. |
+| Mod | What it does | Needs |
+|---|---|---|
+| [Use Oldest First](mods/NivalisFifo) | Cooks use the oldest ingredients first. | |
+| [Manager Order Fix](mods/NivalisOrderFix) | Managers buy what they need and stop. | Nivalis ModKit |
+| [Nivalis ModKit](mods/NivalisModKit) | Shared library for other mods. Does nothing on its own. | |
 
 ## Requirements
 
@@ -21,4 +22,4 @@ Requires the .NET SDK and a BepInEx install that has run the game once.
 
     dotnet build -c Release -p:GameDir="C:\path\to\Nivalis Nights"
 
-Zips land in `releases/`.
+Zips land in `releases/`. The projects in `samples/` are test harnesses and example code for the kit. They build into your plugins folder but are never packaged.

@@ -14,9 +14,11 @@ Every managed venue in the city runs this code, NPC venues included.
 
 ## What the mod does
 
-It hooks `Vendor.BuyItem` and restores the running total. The first vendor for an ingredient records the order size. Each later vendor is asked for what's left, or skipped once the order is filled. The rest of the manager's logic is untouched: when it reorders, how much it orders, and fresh stock only.
+It restores the running total. The first vendor for an ingredient records the order size. Each later vendor is asked for what's left, or skipped once the order is filled. The rest of the manager's logic is untouched: when it reorders, how much it orders, and fresh stock only.
 
 If a purchase fails, usually because the venue is out of money, the mod stops that recipe's purchases. The game's own loop stops at the same point.
+
+From 2.0 the purchase handling lives in [Nivalis ModKit](../NivalisModKit), which this mod requires. Order Fix supplies the vendor order. Behavior is the same as 1.x.
 
 ## Settings
 
@@ -43,30 +45,50 @@ If a purchase fails, usually because the venue is out of money, the mod stops th
 
 Hops are counted over the game's travel graph, `WorldLocation.transitions`. Your own district is 0.
 
+## Requirements
+
+- BepInEx. See the [root README](../../README.md).
+- [Nivalis ModKit](../NivalisModKit) 0.1 or later.
+
 ## Install
 
 1. Install BepInEx. See the [root README](../../README.md).
 2. Launch the game once. Wait for the main menu, then close the game.
-3. Extract the release zip into the game folder. The file lands at `BepInEx\plugins\NivalisOrderFix.dll`.
-4. Launch the game.
+3. Extract the Nivalis ModKit zip into the game folder.
+4. Extract this mod's zip into the same folder. The file lands at `BepInEx\plugins\NivalisOrderFix.dll`.
+5. Launch the game.
 
-To confirm it loaded, open `BepInEx\LogOutput.log` and look for `Manager Order Fix loaded`.
+To confirm it loaded, open `BepInEx\LogOutput.log` and look for `Purchasing pipeline: live` from the kit, then `Manager Order Fix loaded`.
 
-To uninstall, delete `NivalisOrderFix.dll`. Saves are unaffected.
+If the kit is missing, BepInEx skips Order Fix and logs that a dependency is missing.
+
+Upgrading from 1.x: install the kit, then replace `NivalisOrderFix.dll`. Your settings carry over.
+
+To uninstall, delete `NivalisOrderFix.dll`. Remove the kit too if nothing else needs it. Saves are unaffected.
 
 ## Compatibility
 
 Works alongside Use Oldest First.
 
-Other mods that change how managers buy ingredients may conflict.
+Other mods that change how managers buy ingredients through the kit's `Purchasing` API work alongside it. Mods that hook `Vendor.BuyItem` directly will conflict.
 
-Tested on the launch build of Nivalis Nights with BepInEx be.788.
+Tested on Nivalis Nights 1.0 with BepInEx be.788.
+
+## Changes
+
+**2.0.0**
+- Requires Nivalis ModKit. The purchase handling moved into the kit, so other mods can adjust vendor order or quantities without conflicting.
+- Settings file renamed to `bgasm.nivalis.orderfix.cfg`. 1.x settings are copied over on first launch.
+- No change to what managers buy.
+
+**1.0.0**
+- First release.
 
 ## Technical notes
 
-`BuyItem` takes its `ShopTradeRequest` and `BasicTemp` structs by reference. Harmony's IL2CPP trampoline mishandles by-reference structs and passes garbage to the original. The mod hooks `BuyItem` with a native detour (`INativeDetour`) and reads and writes the struct fields through raw pointers at offsets read from the IL2CPP runtime.
+`BuyItem` takes its `ShopTradeRequest` and `BasicTemp` structs by reference. Harmony's IL2CPP trampoline mishandles by-reference structs and passes garbage to the original. The kit hooks `BuyItem` with a native detour and reads and writes the struct fields through raw pointers at offsets read from the IL2CPP runtime.
 
-Purchases run in two phases. While the game's loop walks its vendor list, the hook copies each request and records price, stock and hop distance without buying. When `TryPurchaseIngredients` finishes, a postfix sorts the collected vendors by the chosen mode and calls the original `BuyItem` in that order until the order is filled.
+Purchases run in two phases. While the game's loop walks its vendor list, the hook copies each request and records price, stock and hop distance without buying. When `TryPurchaseIngredients` finishes, Order Fix sorts the collected vendors by the chosen mode, and the kit calls the original `BuyItem` in that order until the order is filled.
 
 ## Fix for the devs
 
