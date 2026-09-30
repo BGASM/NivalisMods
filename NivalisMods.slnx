@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/mods/">
+    <Project Path="mods/NivalisFifo/NivalisFifo.csproj" />
+  </Folder>
+</Solution>

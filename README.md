@@ -1,0 +1,23 @@
+# Nivalis Nights Mods
+
+BepInEx plugins for Nivalis Nights.
+
+| Mod | What it does |
+|---|---|
+| [Use Oldest First](mods/NivalisFifo) | Cooks use the oldest ingredients first. |
+
+## Requirements
+
+All mods need BepInEx 6 bleeding edge, Unity IL2CPP build.
+
+Download: https://builds.bepinex.dev/projects/bepinex_be
+
+Pick build 788 and download `BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.788+5b766a3.zip`. Install steps are in each mod's README.
+
+## Building
+
+Requires the .NET SDK and a BepInEx install that has run the game once.
+
+    dotnet build -c Release -p:GameDir="C:\path\to\Nivalis Nights"
+
+Zips land in `releases/`.
