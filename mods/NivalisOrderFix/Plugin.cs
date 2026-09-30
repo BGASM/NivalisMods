@@ -1,7 +1,5 @@
 using System;
 using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using BepInEx;
 using BepInEx.Configuration;
@@ -9,11 +7,11 @@ using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
 using BepInEx.Unity.IL2CPP.Hook;
 using HarmonyLib;
-using Il2CppInterop.Runtime;
 using Nivalis;
 using Nivalis.Economy;
 using Nivalis.GhostSystem.CustomerLoop;
 using Nivalis.InventorySystem;
+using NivalisModKit;
 using IL2List = Il2CppSystem.Collections.Generic.List<Nivalis.InventorySystem.ItemInstanceData>;
 using SCG = System.Collections.Generic;
 
@@ -21,7 +19,8 @@ namespace NivalisOrderFix;
 
 public enum SortMode { Vanilla, Cheapest, Local, Balanced }
 
-[BepInPlugin("will.nivalis.orderfix", "Manager Order Fix", "1.0.0")]
+[BepInPlugin("will.nivalis.orderfix", "Manager Order Fix", "1.1.0")]
+[BepInDependency(ModKit.Guid)]
 public unsafe class Plugin : BasePlugin
 {
     internal static ManualLogSource L;
@@ -50,14 +49,13 @@ public unsafe class Plugin : BasePlugin
     static int Seq;
 
     // ---------- session caches ----------
-    static readonly SCG.Dictionary<IntPtr, IntPtr> VendorLoc = new();                       // vendor -> WorldLocation
-    static readonly SCG.Dictionary<IntPtr, SCG.Dictionary<IntPtr, int>> HopCache = new();   // from -> (to -> hops)
+    static readonly SCG.Dictionary<IntPtr, WorldLocation> VendorLoc = new();   // vendor -> district
+    static readonly SCG.HashSet<IntPtr> HopTablesLogged = new();              // starts already reported
 
     // ---------- native hook on Vendor.BuyItem(ref request, float, ref BasicTemp) ----------
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     delegate void BuyItemFn(IntPtr self, IntPtr request, float discount, IntPtr tempItem, IntPtr method);
 
-    static BuyItemFn HookDelegate;
     static BuyItemFn Original;
     static INativeDetour Detour;
 
@@ -93,47 +91,19 @@ public unsafe class Plugin : BasePlugin
 
     // ---------- setup ----------
 
-    static IntPtr ClassPtr<T>()
-    {
-        RuntimeHelpers.RunClassConstructor(typeof(T).TypeHandle);
-        return Il2CppClassPointerStore<T>.NativeClassPtr;
-    }
-
-    static int ValueFieldOffset<T>(string field)
-    {
-        IntPtr f = IL2CPP.GetIl2CppField(ClassPtr<T>(), field);
-        if (f == IntPtr.Zero) throw new Exception($"Field {typeof(T).Name}.{field} not found");
-        return (int)IL2CPP.il2cpp_field_get_offset(f) - 2 * IntPtr.Size;
-    }
-
-    static int ValueSize<T>()
-    {
-        uint align = 0;
-        return (int)IL2CPP.il2cpp_class_value_size(ClassPtr<T>(), ref align);
-    }
-
     static void InstallBuyItemHook()
     {
-        OffCustomer   = ValueFieldOffset<ShopTradeRequest>("customer");
-        OffItemType   = ValueFieldOffset<ShopTradeRequest>("itemType");
-        OffFreshness  = ValueFieldOffset<ShopTradeRequest>("freshness");
-        OffAmount     = ValueFieldOffset<ShopTradeRequest>("amount");
-        OffStackCount = ValueFieldOffset<ItemStack.BasicTemp>("StackCount");
-        ReqSize       = ValueSize<ShopTradeRequest>();
-        TempSize      = ValueSize<ItemStack.BasicTemp>();
+        OffCustomer   = StructLayout.FieldOffset<ShopTradeRequest>("customer");
+        OffItemType   = StructLayout.FieldOffset<ShopTradeRequest>("itemType");
+        OffFreshness  = StructLayout.FieldOffset<ShopTradeRequest>("freshness");
+        OffAmount     = StructLayout.FieldOffset<ShopTradeRequest>("amount");
+        OffStackCount = StructLayout.FieldOffset<ItemStack.BasicTemp>("StackCount");
+        ReqSize       = StructLayout.Size<ShopTradeRequest>();
+        TempSize      = StructLayout.Size<ItemStack.BasicTemp>();
 
-        RuntimeHelpers.RunClassConstructor(typeof(Vendor).TypeHandle);
-        var infoField = typeof(Vendor).GetField(
-            "NativeMethodInfoPtr_BuyItem_Public_Void_byref_ShopTradeRequest_Single_byref_BasicTemp_0",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        if (infoField == null) throw new Exception("BuyItem method info field not found");
-
-        IntPtr methodInfo = (IntPtr)infoField.GetValue(null);
-        if (methodInfo == IntPtr.Zero) throw new Exception("BuyItem method info is null");
-        IntPtr methodPtr = Marshal.ReadIntPtr(methodInfo);
-
-        HookDelegate = BuyItemHook;
-        Detour = INativeDetour.CreateAndApply(methodPtr, HookDelegate, out Original);
+        IntPtr methodPtr = NativeHook.MethodPointer<Vendor>(
+            "NativeMethodInfoPtr_BuyItem_Public_Void_byref_ShopTradeRequest_Single_byref_BasicTemp_0");
+        Detour = NativeHook.Install<BuyItemFn>(methodPtr, BuyItemHook, out Original);
 
         if (Verbose.Value)
             L.LogInfo($"Hooked BuyItem at 0x{methodPtr.ToInt64():X}; customer={OffCustomer} " +
@@ -162,49 +132,28 @@ public unsafe class Plugin : BasePlugin
 
     // ---------- distance ----------
 
-    static SCG.Dictionary<IntPtr, int> HopTable(WorldLocation start)
+    static void LogHopTable(WorldLocation start)
     {
-        if (HopCache.TryGetValue(start.Pointer, out var table)) return table;
-
-        table = new SCG.Dictionary<IntPtr, int> { [start.Pointer] = 0 };
-        var queue = new SCG.Queue<WorldLocation>();
-        queue.Enqueue(start);
-
-        while (queue.Count > 0)
-        {
-            var cur = queue.Dequeue();
-            int d = table[cur.Pointer];
-            var links = cur.transitions;
-            if (links == null) continue;
-
-            for (int i = 0; i < links.Count; i++)
-            {
-                var to = links[i]?.ToLocation;
-                if (to == null || table.ContainsKey(to.Pointer)) continue;
-                table[to.Pointer] = d + 1;
-                queue.Enqueue(to);
-            }
-        }
-
-        HopCache[start.Pointer] = table;
-        if (Verbose.Value)
-            L.LogInfo($"Built hop table from {NameOf(start.Pointer)}: {table.Count} districts reachable");
-        return table;
+        if (!Verbose.Value || !HopTablesLogged.Add(start.Pointer)) return;
+        int reachable = World.Locations.Count(l => World.Hops(start, l) != World.Unreachable);
+        L.LogInfo($"Built hop table from {NameOf(start.Pointer)}: {reachable} districts reachable");
     }
 
     static int HopsTo(IntPtr vendor)
     {
         if (CurrentVenueLoc == null) return Unreachable;
 
-        if (!VendorLoc.TryGetValue(vendor, out IntPtr loc))
+        if (!VendorLoc.TryGetValue(vendor, out WorldLocation loc))
         {
-            try { loc = new Vendor(vendor).Location?.Location?.Pointer ?? IntPtr.Zero; }
-            catch { loc = IntPtr.Zero; }
+            try { loc = new Vendor(vendor).Location?.Location; }
+            catch { loc = null; }
             VendorLoc[vendor] = loc;
         }
-        if (loc == IntPtr.Zero) return Unreachable;
+        if (loc == null) return Unreachable;
 
-        return HopTable(CurrentVenueLoc).TryGetValue(loc, out int h) ? h : Unreachable;
+        LogHopTable(CurrentVenueLoc);
+        int h = World.Hops(CurrentVenueLoc, loc);
+        return h == World.Unreachable ? Unreachable : h;
     }
 
     // ---------- the hook: collect ----------
