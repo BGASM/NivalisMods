@@ -5,6 +5,7 @@ BepInEx plugins for Nivalis Nights.
 | Mod | What it does |
 |---|---|
 | [Use Oldest First](mods/NivalisFifo) | Cooks use the oldest ingredients first. |
+| [Manager Order Fix](mods/NivalisOrderFix) | Managers buy what they need and stop. |
 
 ## Requirements
 
