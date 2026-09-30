@@ -6,7 +6,7 @@ using SysList = System.Collections.Generic.List<Nivalis.InventorySystem.ItemInst
 
 namespace NivalisFifo;
 
-[BepInPlugin("will.nivalis.fifo", "Use Oldest First", "0.1.0")]
+[BepInPlugin("bgasm.nivalis.fifo", "Use Oldest First", "0.1.0")]
 public class Plugin : BasePlugin
 {
     public override void Load()

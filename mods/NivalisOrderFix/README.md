@@ -20,7 +20,7 @@ If a purchase fails, usually because the venue is out of money, the mod stops th
 
 ## Settings
 
-`BepInEx\config\will.nivalis.orderfix.cfg`, created on first launch.
+`BepInEx\config\bgasm.nivalis.orderfix.cfg`, created on first launch. Settings from 1.x (`will.nivalis.orderfix.cfg`) are copied over automatically.
 
 `VendorSort` picks the vendor order:
 

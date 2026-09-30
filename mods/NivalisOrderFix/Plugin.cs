@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
@@ -14,7 +15,7 @@ public enum SortMode { Vanilla, Cheapest, Local, Balanced }
 
 // The fix itself (buy what's needed and stop) is the kit's purchasing pipeline, which turns on
 // when this mod adds a VendorOrdering handler. This mod supplies the vendor order.
-[BepInPlugin("will.nivalis.orderfix", "Manager Order Fix", "2.0.0")]
+[BepInPlugin("bgasm.nivalis.orderfix", "Manager Order Fix", "2.0.0")]
 [BepInDependency(ModKit.Guid)]
 public class Plugin : BasePlugin
 {
@@ -31,6 +32,7 @@ public class Plugin : BasePlugin
     public override void Load()
     {
         L = Log;
+        MigrateOldConfig();
         VendorSort = Config.Bind("General", "VendorSort", SortMode.Vanilla,
             "Vendor order when filling an order. Vanilla: most stock first (the game's intent). " +
             "Cheapest: lowest price first. Local: nearest district first. Balanced: weighs price, distance and stock.");
@@ -49,6 +51,21 @@ public class Plugin : BasePlugin
             L.LogInfo($"Manager Order Fix loaded, VendorSort = {VendorSort.Value}");
         else
             L.LogError("Manager Order Fix: the kit's purchasing pipeline is unavailable, fix inactive");
+    }
+
+    // 1.x used the GUID will.nivalis.orderfix, so its settings are in that file. Copy them to the
+    // new file once, before binding. The old file is left in place.
+    void MigrateOldConfig()
+    {
+        try
+        {
+            string oldPath = Path.Combine(Paths.ConfigPath, "will.nivalis.orderfix.cfg");
+            if (File.Exists(Config.ConfigFilePath) || !File.Exists(oldPath)) return;
+            File.Copy(oldPath, Config.ConfigFilePath);
+            Config.Reload();
+            L.LogInfo("Copied settings from will.nivalis.orderfix.cfg (Order Fix 1.x); the old file can be deleted");
+        }
+        catch (Exception e) { L.LogWarning($"Could not copy 1.x settings, using defaults: {e.Message}"); }
     }
 
     // ---------- helpers ----------
