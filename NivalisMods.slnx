@@ -1,5 +1,7 @@
 <Solution>
   <Folder Name="/mods/">
     <Project Path="mods/NivalisFifo/NivalisFifo.csproj" />
+    <Project Path="mods/NivalisManagerDebug/NivalisManagerDebug.csproj" />
+    <Project Path="mods/NivalisOrderFix/NivalisOrderFix.csproj" />
   </Folder>
 </Solution>
