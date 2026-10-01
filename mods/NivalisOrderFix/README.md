@@ -1,24 +1,20 @@
 # Manager Order Fix
 
-Managers buy what they need and stop.
+Choose which vendors your managers buy ingredients from: the cheapest, the nearest, or a balance of price, distance and stock.
 
-## The bug
+## The over-buy bug (fixed by the game)
 
-Managers buy the full order from every vendor that stocks an ingredient. Needed 5 potatoes, bought 10. Needed 1 garlic, bought 4 from four shops.
+Before the game's first patch (October 1, 2026), managers bought the full order from every vendor that stocked an ingredient. Needed 5 potatoes, bought 10. Needed 1 garlic, bought 4 from four shops. Order Fix 1.x existed to fix that.
 
-The purchase loop in `VenueAreaGhost.TryPurchaseIngredients` tracks what's left to buy in a temp stack. `Vendor.BuyItem` checks the order against it and subtracts what it sells. The temp stack is created inside the vendor loop, so every vendor starts from the full amount and nothing carries over. A second stop check compares new purchases against current stock plus the order size, so it trips late.
-
-Same save, same hour: 37 units bought before, 19 after.
-
-Every managed venue in the city runs this code, NPC venues included.
+The patch fixed it in the game: managers now keep a running total and stop when the order is filled. Order Fix no longer needs to correct quantities, and doesn't change them. On the patched game it only changes which vendors are used, and in what order.
 
 ## What the mod does
 
-It restores the running total. The first vendor for an ingredient records the order size. Each later vendor is asked for what's left, or skipped once the order is filled. The rest of the manager's logic is untouched: when it reorders, how much it orders, and fresh stock only.
+When a manager restocks an ingredient, the game walks its vendor list, most stock first, and buys until the order is filled. Order Fix lets the game work out how much to buy, then has the purchases made in the vendor order you choose. Managers still decide when to reorder and how much, and still buy fresh stock only.
 
-If a purchase fails, usually because the venue is out of money, the mod stops that recipe's purchases. The game's own loop stops at the same point.
+If a purchase fails, usually because the venue is out of money, that recipe's purchases stop, the same point where the game's own loop stops.
 
-From 2.0 the purchase handling lives in [Nivalis ModKit](../NivalisModKit), which this mod requires. Order Fix supplies the vendor order. Behavior is the same as 1.x.
+The purchase handling lives in [Nivalis ModKit](../NivalisModKit), which this mod requires.
 
 ## Settings
 
@@ -28,12 +24,12 @@ From 2.0 the purchase handling lives in [Nivalis ModKit](../NivalisModKit), whic
 
 | Mode | Order |
 |---|---|
-| `Vanilla` | Most stock first. The game's intended order. Default. |
+| `Vanilla` | Most stock first, the game's own order. Default. Same as not having the mod. |
 | `Cheapest` | Lowest price first. Most buying shifts to Calypso Island. |
 | `Local` | Nearest district first. Your own district can be the most expensive. |
 | `Balanced` | Weighs price, distance and stock. |
 
-`Vanilla` is the bug fix and nothing else. The other modes change how the city's economy moves.
+The other modes change how the city's economy moves: every managed venue in the city buys this way, NPC venues included.
 
 `Balanced` scores each vendor as `price × (1 + DistanceWeight × hops) × (1 + ScarcityWeight / stock)` and buys from the lowest score.
 
@@ -72,14 +68,14 @@ Works alongside Use Oldest First.
 
 Other mods that change how managers buy ingredients through the kit's `Purchasing` API work alongside it. Mods that hook `Vendor.BuyItem` directly will conflict.
 
-Tested on Nivalis Nights 1.0 with BepInEx be.788.
+Tested on Nivalis Nights 1.0 (first patch, October 1, 2026) with BepInEx be.788. Without the patch, the over-buy bug is still corrected.
 
 ## Changes
 
 **2.0.0**
 - Requires Nivalis ModKit. The purchase handling moved into the kit, so other mods can adjust vendor order or quantities without conflicting.
 - Settings file renamed to `bgasm.nivalis.orderfix.cfg`. 1.x settings are copied over on first launch.
-- No change to what managers buy.
+- Works with the game's first patch, which fixed the over-buy bug. On the patched game, Order Fix only sets the vendor order.
 
 **1.0.0**
 - First release.
@@ -89,7 +85,3 @@ Tested on Nivalis Nights 1.0 with BepInEx be.788.
 `BuyItem` takes its `ShopTradeRequest` and `BasicTemp` structs by reference. Harmony's IL2CPP trampoline mishandles by-reference structs and passes garbage to the original. The kit hooks `BuyItem` with a native detour and reads and writes the struct fields through raw pointers at offsets read from the IL2CPP runtime.
 
 Purchases run in two phases. While the game's loop walks its vendor list, the hook copies each request and records price, stock and hop distance without buying. When `TryPurchaseIngredients` finishes, Order Fix sorts the collected vendors by the chosen mode, and the kit calls the original `BuyItem` in that order until the order is filled.
-
-## Fix for the devs
-
-In `TryPurchaseIngredients`, move `ItemStack.BasicTemp.SafeCreate(item, amountToBuy, price, out temp)` above the vendor loop.
