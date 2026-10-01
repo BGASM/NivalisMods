@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Usage: tools/decomp.sh 'VenueAreaGhost$$TryPurchaseIngredients' 'Vendor$$BuyItem' ...
-# Ghidra GUI must be closed. GVER=v1.0-p1 uses the patched build (project folder and output subfolder).
+# Ghidra GUI must be closed. Decompiles the current build (patch 1) into research/decomp/v1.0-p1;
+# GVER=v1.0 for the original release (research/decomp/v1.0).
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd -W)"
 source "$(dirname "$0")/local.env"
+GVER="${GVER-v1.0-p1}"   # current game build; GVER=v1.0 for the original release
+[ "$GVER" = "v1.0" ] && GFOLDER="Nivalis" || GFOLDER="Nivalis/$GVER"
 
-"$GHIDRA" "$PROJ_DIR" "Nivalis${GVER:+/$GVER}" -process GameAssembly.dll -noanalysis -readOnly \
+"$GHIDRA" "$PROJ_DIR" "$GFOLDER" -process GameAssembly.dll -noanalysis -readOnly \
   -scriptPath "$ROOT/tools/ghidra_scripts" \
-  -postScript DecompileByName.java "$ROOT/research/decomp${GVER:+/$GVER}${GOUT:+/$GOUT}" "$@" 2>&1 | grep -E "wrote|ERROR|Exception" || true
+  -postScript DecompileByName.java "$ROOT/research/decomp/$GVER" "$@" 2>&1 | grep -E "wrote|ERROR|Exception" || true
