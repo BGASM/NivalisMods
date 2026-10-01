@@ -3,6 +3,7 @@
     <Project Path="mods/NivalisFifo/NivalisFifo.csproj" />
     <Project Path="mods/NivalisModKit/NivalisModKit.csproj" />
     <Project Path="mods/NivalisOrderFix/NivalisOrderFix.csproj" />
+    <Project Path="mods/NivalisOrderFixStandalone/NivalisOrderFixStandalone.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/KitTester/KitTester.csproj" />
