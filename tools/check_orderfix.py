@@ -21,13 +21,13 @@ DW, SW = 0.07, 2.0
 
 START = re.compile(r"Kit Tester\] BuyIngredientsStarting: (.+?) / (.+)$")
 FINISH = re.compile(r"Kit Tester\] BuyIngredientsFinished: ")
-BUY = re.compile(r"Manager Order Fix\] Buy (.+?) x(\d+) at (.+?) \(price (\d+), stock (\d+), "
+BUY = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Buy (.+?) x(\d+) at (.+?) \(price (\d+), stock (\d+), "
                  r"hops (\d+), score (\d+)\) \[(\w+), (\d+) vendors\]")
-SKIP = re.compile(r"Manager Order Fix\] Skip (.+?) at (.+?) \(price (\d+), stock (\d+), hops (\d+)\): order filled")
-FAIL = re.compile(r"Manager Order Fix\] Purchase failed for (.+?) at (.+?) \(")
+SKIP = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Skip (.+?) at (.+?) \(price (\d+), stock (\d+), hops (\d+)\): order filled")
+FAIL = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Purchase failed for (.+?) at (.+?) \(")
 # Order Fix 1.x hooked BuyItem itself; from 2.0 the kit's purchasing pipeline prints the line.
-HOOK = re.compile(r"(?:Manager Order Fix|Nivalis ModKit)\] Hooked BuyItem at \S+ (.*)$")
-MODE = re.compile(r"Manager Order Fix\] Manager Order Fix loaded, VendorSort = (\w+)")
+HOOK = re.compile(r"(?:Manager Order Fix(?: \(Standalone\))?|Nivalis ModKit)\] Hooked (?:BuyItem at \S+ |(GetVendorsByItem): )(.*)$")
+MODE = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Manager Order Fix loaded, VendorSort = (\w+)")
 
 
 def sort_key(mode, c):
@@ -54,7 +54,7 @@ def parse(path):
             if m := MODE.search(line):
                 mode = m.group(1)
             elif m := HOOK.search(line):
-                hook = m.group(1)
+                hook = f"{m.group(1) or 'BuyItem'}: {m.group(2)}"
             elif m := START.search(line):
                 cur = {"venue": m.group(1), "recipe": m.group(2), "items": defaultdict(list)}
                 rounds.append(cur)
@@ -81,7 +81,7 @@ def check(path, hops_table, hooks):
     current, mode_counts = None, defaultdict(int)
     hooks[path] = hook
     if hook is None:
-        errors.append("no 'Hooked BuyItem' line (is Verbose on?)")
+        errors.append("no 'Hooked BuyItem' or 'Hooked GetVendorsByItem' line (is Verbose on?)")
 
     for r in rounds:
         where = f"{r['venue']} / {r['recipe']}"
@@ -166,14 +166,20 @@ def main(argv):
         print(f"PASS  hops: {pairs} (venue, vendor) pairs agree across logs")
 
     # 5. startup line identical
-    distinct = {h for h in hooks.values() if h is not None}
-    if len(distinct) > 1:
-        failed = True
-        print("FAIL  startup offsets differ:")
-        for p, h in hooks.items():
-            print(f"  {p}: {h}")
-    elif distinct:
-        print(f"PASS  startup: {distinct.pop()}")
+    # compared per edition: the kit hooks BuyItem, the standalone GetVendorsByItem
+    by_kind = defaultdict(set)
+    for h in hooks.values():
+        if h is not None:
+            by_kind[h.split(":", 1)[0]].add(h)
+    for kind, distinct in sorted(by_kind.items()):
+        if len(distinct) > 1:
+            failed = True
+            print(f"FAIL  startup ({kind}) differs:")
+            for p, h in hooks.items():
+                if h and h.startswith(kind + ":"):
+                    print(f"  {p}: {h}")
+        else:
+            print(f"PASS  startup: {distinct.pop()}")
 
     return 1 if failed else 0
 

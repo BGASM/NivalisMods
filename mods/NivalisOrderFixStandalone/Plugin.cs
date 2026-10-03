@@ -1,6 +1,6 @@
 using System;
+using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using BepInEx;
@@ -11,6 +11,7 @@ using BepInEx.Unity.IL2CPP.Hook;
 using HarmonyLib;
 using Il2CppInterop.Runtime;
 using Nivalis;
+using Nivalis.CraftingSystem;
 using Nivalis.Economy;
 using Nivalis.GhostSystem.CustomerLoop;
 using Nivalis.InventorySystem;
@@ -21,8 +22,13 @@ namespace NivalisOrderFixStandalone;
 
 public enum SortMode { Vanilla, Cheapest, Local, Balanced }
 
+// Since game patch 1 the managers' purchase loop is correct: it keeps a running total and stops when
+// the order is filled. It walks the list from EconomyManager.GetVendorsByItem (most stock first), so
+// sorting that list is all Order Fix needs to do. Only lists built inside TryPurchaseIngredients are
+// sorted; furniture buying uses the same method and is left alone.
+//
 // Same GUID as the ModKit edition: BepInEx loads only one, and both share bgasm.nivalis.orderfix.cfg.
-[BepInPlugin("bgasm.nivalis.orderfix", "Manager Order Fix (Standalone)", "1.0.0")]
+[BepInPlugin("bgasm.nivalis.orderfix", "Manager Order Fix (Standalone)", "1.1.0")]
 public unsafe class Plugin : BasePlugin
 {
     internal static ManualLogSource L;
@@ -33,43 +39,61 @@ public unsafe class Plugin : BasePlugin
 
     const int Unreachable = 99;
 
-    // ---------- per-recipe context ----------
+    // ---------- per-recipe context (set by the TryPurchaseIngredients prefix) ----------
     static IntPtr CurrentGhost = IntPtr.Zero;
+    static VenueAreaGhost CurrentGhostObj;
     static WorldLocation CurrentVenueLoc;
-    static readonly SCG.Dictionary<IntPtr, int> ToBuy = new();
-    static readonly SCG.Dictionary<IntPtr, int> Bought = new();
+    static float CurrentBarter = 1f, CurrentLimit;
 
-    sealed class Pending
+    sealed class Offer
     {
-        public IntPtr Vendor, Req, Temp, Method;
-        public float Discount;
-        public int Amount, Price, Stock, Hops, Seq;
+        public IntPtr Vendor;
+        public int Price, Stock, Hops, Seq;
         public double Score;
+        public bool Visited;   // the game priced this vendor, so its loop reached it
+        public int Bought;
     }
-    static readonly SCG.Dictionary<IntPtr, SCG.List<Pending>> PendingByItem = new();
-    static readonly SCG.List<IntPtr> PendingOrder = new();
-    static int Seq;
+
+    sealed class ItemRound
+    {
+        public IntPtr Item;
+        public SCG.List<Offer> Offers;
+        public SortMode Mode;
+        public Offer Last;     // the vendor the game priced most recently
+    }
+
+    // Per item, the vendors in the order the game visits them, and what each sold (Verbose only).
+    // Vendor stock doesn't drop when a manager buys, so sales are credited from the purchase itself:
+    // the game prices a vendor (GetItemBuyCost) right before buying from it (TryMakePurchase).
+    static readonly SCG.List<ItemRound> Rounds = new();
+    static ItemRound CurrentItem;
+    static bool sorting;      // our own GetItemBuyCost calls while sorting don't count as visits
 
     // ---------- session caches ----------
     static readonly SCG.Dictionary<IntPtr, IntPtr> VendorLoc = new();                       // vendor -> WorldLocation
     static readonly SCG.Dictionary<IntPtr, SCG.Dictionary<IntPtr, int>> HopCache = new();   // from -> (to -> hops)
 
-    // ---------- native hook on Vendor.BuyItem(ref request, float, ref BasicTemp) ----------
+    // ---------- native hook on EconomyManager.GetVendorsByItem ----------
+    // Returns a ListPool.Handle struct through a hidden pointer and the list through an out
+    // parameter. Harmony can't wrap that safely under IL2CPP, so this is a native detour.
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    delegate void BuyItemFn(IntPtr self, IntPtr request, float discount, IntPtr tempItem, IntPtr method);
+    delegate IntPtr GetVendorsFn(IntPtr ret, IntPtr self, IntPtr item, IntPtr resultsRef, IntPtr method);
 
-    static BuyItemFn HookDelegate;
-    static BuyItemFn Original;
+    static GetVendorsFn HookDelegate;
+    static GetVendorsFn Original;
     static INativeDetour Detour;
 
-    static int OffCustomer, OffItemType, OffFreshness, OffAmount, OffStackCount;
-    static int ReqSize, TempSize;
+    // Layout of List<ValueTuple<Vendor, int>>, read from the IL2CPP runtime on first use.
+    static bool layoutKnown;
+    static int OffItems, OffSize, ElemSize, OffVendor, OffCount;
+    static readonly int ArrayData = 4 * IntPtr.Size;   // Il2CppArray: klass, monitor, bounds, max_length
 
     public override void Load()
     {
         L = Log;
+        MigrateOldConfig();
         VendorSort = Config.Bind("General", "VendorSort", SortMode.Vanilla,
-            "Vendor order when filling an order. Vanilla: most stock first (the game's intent). " +
+            "Vendor order when filling an order. Vanilla: most stock first (the game's own order). " +
             "Cheapest: lowest price first. Local: nearest district first. Balanced: weighs price, distance and stock.");
         DistanceWeight = Config.Bind("Balanced", "DistanceWeight", 0.07f,
             "Balanced mode: price penalty per district hop. 0.07 = +7% per hop. " +
@@ -77,69 +101,79 @@ public unsafe class Plugin : BasePlugin
         ScarcityWeight = Config.Bind("Balanced", "ScarcityWeight", 2.0f,
             "Balanced mode: penalty for low stock, as price x (1 + ScarcityWeight / stock).");
         Verbose = Config.Bind("Debug", "Verbose", false,
-            "Log each vendor purchase the fix makes or skips.");
-
-        Harmony.CreateAndPatchAll(typeof(Plugin));
+            "Log each vendor purchase and skip.");
 
         try
         {
-            InstallBuyItemHook();
+            InstallHook();
+            Harmony.CreateAndPatchAll(typeof(Plugin));
             L.LogInfo($"Manager Order Fix loaded, VendorSort = {VendorSort.Value}");
         }
         catch (Exception e)
         {
-            L.LogError($"Manager Order Fix could not hook BuyItem, fix inactive: {e}");
+            L.LogError($"Manager Order Fix could not hook GetVendorsByItem, inactive: {e}");
         }
+    }
+
+    // 1.0 used the GUID will.nivalis.orderfix, so its settings are in that file. Copy them to the
+    // new file once, before binding. The old file is left in place.
+    void MigrateOldConfig()
+    {
+        try
+        {
+            string oldPath = Path.Combine(Paths.ConfigPath, "will.nivalis.orderfix.cfg");
+            if (File.Exists(Config.ConfigFilePath) || !File.Exists(oldPath)) return;
+            File.Copy(oldPath, Config.ConfigFilePath);
+            Config.Reload();
+            L.LogInfo("Copied settings from will.nivalis.orderfix.cfg (Order Fix 1.0); the old file can be deleted");
+        }
+        catch (Exception e) { L.LogWarning($"Could not copy 1.0 settings, using defaults: {e.Message}"); }
     }
 
     // ---------- setup ----------
 
-    static IntPtr ClassPtr<T>()
+    static void InstallHook()
     {
-        RuntimeHelpers.RunClassConstructor(typeof(T).TypeHandle);
-        return Il2CppClassPointerStore<T>.NativeClassPtr;
-    }
-
-    static int ValueFieldOffset<T>(string field)
-    {
-        IntPtr f = IL2CPP.GetIl2CppField(ClassPtr<T>(), field);
-        if (f == IntPtr.Zero) throw new Exception($"Field {typeof(T).Name}.{field} not found");
-        return (int)IL2CPP.il2cpp_field_get_offset(f) - 2 * IntPtr.Size;
-    }
-
-    static int ValueSize<T>()
-    {
-        uint align = 0;
-        return (int)IL2CPP.il2cpp_class_value_size(ClassPtr<T>(), ref align);
-    }
-
-    static void InstallBuyItemHook()
-    {
-        OffCustomer   = ValueFieldOffset<ShopTradeRequest>("customer");
-        OffItemType   = ValueFieldOffset<ShopTradeRequest>("itemType");
-        OffFreshness  = ValueFieldOffset<ShopTradeRequest>("freshness");
-        OffAmount     = ValueFieldOffset<ShopTradeRequest>("amount");
-        OffStackCount = ValueFieldOffset<ItemStack.BasicTemp>("StackCount");
-        ReqSize       = ValueSize<ShopTradeRequest>();
-        TempSize      = ValueSize<ItemStack.BasicTemp>();
-
-        RuntimeHelpers.RunClassConstructor(typeof(Vendor).TypeHandle);
-        var infoField = typeof(Vendor).GetField(
-            "NativeMethodInfoPtr_BuyItem_Public_Void_byref_ShopTradeRequest_Single_byref_BasicTemp_0",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        if (infoField == null) throw new Exception("BuyItem method info field not found");
-
+        RuntimeHelpers.RunClassConstructor(typeof(EconomyManager).TypeHandle);
+        var infoField = typeof(EconomyManager).GetField(
+            "NativeMethodInfoPtr_GetVendorsByItem_Public_Handle_ValueTuple_2_Vendor_Int32_ItemType_byref_List_1_ValueTuple_2_Vendor_Int32_0",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        if (infoField == null) throw new Exception("GetVendorsByItem method info field not found");
         IntPtr methodInfo = (IntPtr)infoField.GetValue(null);
-        if (methodInfo == IntPtr.Zero) throw new Exception("BuyItem method info is null");
-        IntPtr methodPtr = Marshal.ReadIntPtr(methodInfo);
+        if (methodInfo == IntPtr.Zero) throw new Exception("GetVendorsByItem method info is null");
+        IntPtr methodPtr = *(IntPtr*)methodInfo;
 
-        HookDelegate = BuyItemHook;
+        HookDelegate = GetVendorsHook;
         Detour = INativeDetour.CreateAndApply(methodPtr, HookDelegate, out Original);
+    }
 
+    static int FieldOffset(IntPtr klass, string name)
+    {
+        IntPtr f = IL2CPP.il2cpp_class_get_field_from_name(klass, name);
+        if (f == IntPtr.Zero) throw new Exception($"field {name} not found");
+        return (int)IL2CPP.il2cpp_field_get_offset(f);
+    }
+
+    // Reads the list layout from a live list: the List<T> fields, then T = ValueTuple<Vendor, int>.
+    static void LearnLayout(IntPtr list)
+    {
+        IntPtr listClass = IL2CPP.il2cpp_object_get_class(list);
+        OffItems = FieldOffset(listClass, "_items");
+        OffSize = FieldOffset(listClass, "_size");
+
+        IntPtr items = *(IntPtr*)(list + OffItems);
+        if (items == IntPtr.Zero) throw new Exception("list has no backing array");
+        IntPtr arrayClass = IL2CPP.il2cpp_object_get_class(items);
+        ElemSize = IL2CPP.il2cpp_array_element_size(arrayClass);
+        IntPtr elemClass = IL2CPP.il2cpp_class_get_element_class(arrayClass);
+        // Field offsets of a value type include the object header; array elements don't have one.
+        OffVendor = FieldOffset(elemClass, "Item1") - 2 * IntPtr.Size;
+        OffCount = FieldOffset(elemClass, "Item2") - 2 * IntPtr.Size;
+
+        layoutKnown = true;
         if (Verbose.Value)
-            L.LogInfo($"Hooked BuyItem at 0x{methodPtr.ToInt64():X}; customer={OffCustomer} " +
-                      $"itemType={OffItemType} freshness={OffFreshness} amount={OffAmount} " +
-                      $"stackCount={OffStackCount} reqSize={ReqSize} tempSize={TempSize}");
+            L.LogInfo($"Hooked GetVendorsByItem: items={OffItems} size={OffSize} elem={ElemSize} " +
+                      $"vendor={OffVendor} count={OffCount}");
     }
 
     static string NameOf(IntPtr obj)
@@ -152,13 +186,6 @@ public unsafe class Plugin : BasePlugin
             return i > 0 ? s.Substring(0, i) : s;
         }
         catch { return "?"; }
-    }
-
-    static int RemainingFor(IntPtr item)
-    {
-        ToBuy.TryGetValue(item, out int toBuy);
-        Bought.TryGetValue(item, out int bought);
-        return toBuy - bought;
     }
 
     // ---------- distance ----------
@@ -208,75 +235,76 @@ public unsafe class Plugin : BasePlugin
         return HopTable(CurrentVenueLoc).TryGetValue(loc, out int h) ? h : Unreachable;
     }
 
-    // ---------- the hook: collect ----------
+    // ---------- the hook: sort the vendor list ----------
 
-    static void BuyItemHook(IntPtr self, IntPtr request, float discount, IntPtr tempItem, IntPtr method)
+    static IntPtr GetVendorsHook(IntPtr ret, IntPtr self, IntPtr item, IntPtr resultsRef, IntPtr method)
     {
+        IntPtr r = Original(ret, self, item, resultsRef, method);
+        if (CurrentGhost == IntPtr.Zero || resultsRef == IntPtr.Zero) return r;   // not ingredient buying
         try
         {
-            if (CurrentGhost == IntPtr.Zero || request == IntPtr.Zero || tempItem == IntPtr.Zero ||
-                *(IntPtr*)(request + OffCustomer) != CurrentGhost)
-            {
-                Original(self, request, discount, tempItem, method);
-                return;
-            }
-
-            IntPtr item = *(IntPtr*)(request + OffItemType);
-            int* stack  = (int*)(tempItem + OffStackCount);
-            if (!ToBuy.ContainsKey(item)) ToBuy[item] = *stack;
-
-            Defer(self, request, discount, tempItem, method, item, *(int*)(request + OffAmount));
-            // the purchase happens in FlushAll, in the chosen order
+            IntPtr list = *(IntPtr*)resultsRef;
+            if (list != IntPtr.Zero) Sort(list, item);
         }
         catch (Exception e)
         {
-            L.LogError($"BuyItemHook: {e.Message}");
-            try { Original(self, request, discount, tempItem, method); } catch { }
+            L.LogError($"GetVendorsHook: {e.Message}");
         }
+        return r;
     }
 
-    static void Defer(IntPtr vendor, IntPtr request, float discount, IntPtr tempItem, IntPtr method,
-        IntPtr item, int amount)
+    static void Sort(IntPtr list, IntPtr item)
     {
-        var p = new Pending
-        {
-            Vendor = vendor, Method = method, Discount = discount,
-            Amount = amount, Seq = Seq++,
-            Req = Marshal.AllocHGlobal(ReqSize),
-            Temp = Marshal.AllocHGlobal(TempSize)
-        };
-        Buffer.MemoryCopy((void*)request, (void*)p.Req, ReqSize, ReqSize);
-        Buffer.MemoryCopy((void*)tempItem, (void*)p.Temp, TempSize, TempSize);
+        if (!layoutKnown) LearnLayout(list);
 
-        var v = new Vendor(vendor);
+        int count = *(int*)(list + OffSize);
+        if (count == 0) return;
+        IntPtr items = *(IntPtr*)(list + OffItems);
+        byte* data = (byte*)items + ArrayData;
+
         var it = new ItemType(item);
-
-        try { p.Price = v.GetItemBuyCost(it, *(FoodFreshness*)(request + OffFreshness)); }
-        catch { p.Price = int.MaxValue; }
-
-        try { p.Stock = v.container?.GetItemCount(it) ?? 0; }
-        catch { p.Stock = 0; }
-
-        p.Hops = HopsTo(vendor);
-
-        p.Score = p.Price
-                * (1.0 + DistanceWeight.Value * p.Hops)
-                * (1.0 + ScarcityWeight.Value / Math.Max(p.Stock, 1));
-
-        if (!PendingByItem.TryGetValue(item, out var list))
+        var offers = new SCG.List<Offer>(count);
+        for (int i = 0; i < count; i++)
         {
-            list = new SCG.List<Pending>();
-            PendingByItem[item] = list;
-            PendingOrder.Add(item);
+            byte* e = data + i * ElemSize;
+            IntPtr vendor = *(IntPtr*)(e + OffVendor);
+            var o = new Offer { Vendor = vendor, Stock = *(int*)(e + OffCount), Seq = i };
+            sorting = true;
+            try { o.Price = new Vendor(vendor).GetItemBuyCost(it, FoodFreshness.Fresh); }
+            catch { o.Price = int.MaxValue; }
+            finally { sorting = false; }
+            o.Hops = HopsTo(vendor);
+            o.Score = o.Price
+                    * (1.0 + DistanceWeight.Value * o.Hops)
+                    * (1.0 + ScarcityWeight.Value / Math.Max(o.Stock, 1));
+            offers.Add(o);
         }
-        list.Add(p);
+
+        SortMode mode = VendorSort.Value;
+        var sorted = Order(offers, mode);
+
+        if (mode != SortMode.Vanilla)
+        {
+            // Write the elements back in the new order. Vendor references go through the GC write
+            // barrier; the stock count is a plain int.
+            for (int i = 0; i < count; i++)
+            {
+                byte* e = data + i * ElemSize;
+                IL2CPP.il2cpp_gc_wbarrier_set_field(items, (IntPtr)(e + OffVendor), sorted[i].Vendor);
+                *(int*)(e + OffCount) = sorted[i].Stock;
+            }
+        }
+
+        if (Verbose.Value)
+        {
+            CurrentItem = new ItemRound { Item = item, Offers = sorted, Mode = mode };
+            Rounds.Add(CurrentItem);
+        }
     }
 
-    // ---------- the flush: sort and buy ----------
-
-    static SCG.List<Pending> Order(SCG.List<Pending> list)
+    static SCG.List<Offer> Order(SCG.List<Offer> list, SortMode mode)
     {
-        switch (VendorSort.Value)
+        switch (mode)
         {
             case SortMode.Cheapest:
                 return list.OrderBy(p => p.Price).ThenByDescending(p => p.Stock).ThenBy(p => p.Seq).ToList();
@@ -284,130 +312,110 @@ public unsafe class Plugin : BasePlugin
                 return list.OrderBy(p => p.Hops).ThenByDescending(p => p.Stock).ThenBy(p => p.Price).ThenBy(p => p.Seq).ToList();
             case SortMode.Balanced:
                 return list.OrderBy(p => p.Score).ThenByDescending(p => p.Stock).ThenBy(p => p.Seq).ToList();
-            default: // Vanilla
-                return list.OrderByDescending(p => p.Stock).ThenBy(p => p.Seq).ToList();
+            default: // Vanilla: the game's order, already most stock first
+                return list;
         }
     }
 
-    static bool FlushAll()
+    // ---------- Verbose: which vendor the game bought from ----------
+
+    [HarmonyPatch(typeof(Vendor), nameof(Vendor.GetItemBuyCost), new[] { typeof(ItemType), typeof(FoodFreshness) })]
+    [HarmonyPostfix]
+    static void PricedPost(Vendor __instance, ItemType item)
     {
-        bool boughtAny = false;
         try
         {
-            foreach (IntPtr item in PendingOrder)
-            {
-                var sorted = Order(PendingByItem[item]);
-
-                foreach (var p in sorted)
-                {
-                    int remaining = RemainingFor(item);
-                    if (remaining <= 0)
-                    {
-                        if (Verbose.Value)
-                            L.LogInfo($"Skip {NameOf(item)} at {NameOf(p.Vendor)} " +
-                                      $"(price {p.Price}, stock {p.Stock}, hops {p.Hops}): order filled");
-                        continue;
-                    }
-
-                    int n = Math.Min(p.Amount, remaining);
-
-                    *(int*)(p.Req + OffAmount) = n;
-                    *(int*)(p.Temp + OffStackCount) = remaining;
-
-                    if (Verbose.Value)
-                        L.LogInfo($"Buy {NameOf(item)} x{n} at {NameOf(p.Vendor)} " +
-                                  $"(price {p.Price}, stock {p.Stock}, hops {p.Hops}, score {p.Score:0}) " +
-                                  $"[{VendorSort.Value}, {sorted.Count} vendors]");
-
-                    int before = RemainingFor(item);
-                    Original(p.Vendor, p.Req, p.Discount, p.Temp, p.Method);
-
-                    if (RemainingFor(item) < before)
-                    {
-                        boughtAny = true;
-                    }
-                    else
-                    {
-                        // TryMakePurchase refused, almost always because the venue is out of money.
-                        // A failed BuyItem puts newly created items into the vendor's stock, so stop
-                        // here, the same point where the game's own loop breaks on low cash.
-                        if (Verbose.Value)
-                            L.LogInfo($"Purchase failed for {NameOf(item)} at {NameOf(p.Vendor)} " +
-                                      "(likely out of money). Stopping this recipe's purchases.");
-                        return boughtAny;
-                    }
-                }
-            }
+            var r = CurrentItem;
+            if (sorting || r == null || __instance == null || item == null || item.Pointer != r.Item) return;
+            IntPtr v = __instance.Pointer;
+            foreach (var o in r.Offers)
+                if (o.Vendor == v) { o.Visited = true; r.Last = o; return; }
         }
-        catch (Exception e)
-        {
-            L.LogError($"FlushAll: {e.Message}");
-        }
-        return boughtAny;
+        catch { }
     }
 
-    static void FreePending()
+    [HarmonyPatch(typeof(VenueAreaGhost), nameof(VenueAreaGhost.TryMakePurchase))]
+    [HarmonyPostfix]
+    static void PurchasePost(VenueAreaGhost __instance, ItemType stackType, IL2List boughtInstances, bool __result)
     {
-        foreach (var list in PendingByItem.Values)
-            foreach (var p in list)
+        try
+        {
+            var r = CurrentItem;
+            if (!__result || r?.Last == null || __instance == null || __instance.Pointer != CurrentGhost) return;
+            if (stackType == null || stackType.Pointer != r.Item) return;
+            r.Last.Bought += boughtInstances?.Count ?? 0;
+        }
+        catch { }
+    }
+
+    static void LogRound()
+    {
+        int money = int.MaxValue;
+        try
+        {
+            var inv = CurrentGhostObj?.ownerInventory;
+            if (inv != null) money = new IMoneyContainer(inv.Pointer).Money;
+        }
+        catch { }
+
+        foreach (var r in Rounds)
+        {
+            string name = NameOf(r.Item);
+            int n = r.Offers.Count;
+            foreach (var o in r.Offers)
             {
-                if (p.Req != IntPtr.Zero) Marshal.FreeHGlobal(p.Req);
-                if (p.Temp != IntPtr.Zero) Marshal.FreeHGlobal(p.Temp);
+                if (o.Bought > 0)
+                    L.LogInfo($"Buy {name} x{o.Bought} at {NameOf(o.Vendor)} " +
+                              $"(price {o.Price}, stock {o.Stock}, hops {o.Hops}, score {o.Score:0}) [{r.Mode}, {n} vendors]");
+                else if (!o.Visited)
+                    L.LogInfo($"Skip {name} at {NameOf(o.Vendor)} (price {o.Price}, stock {o.Stock}, hops {o.Hops}): order filled");
+                else if (o == r.Last && (int)Math.Round(o.Price * CurrentBarter, MidpointRounding.AwayFromZero) > money)
+                {
+                    // The game's loop stops at the first vendor the venue can't afford.
+                    L.LogInfo($"Purchase failed for {name} at {NameOf(o.Vendor)} (out of money). " +
+                              "The game stopped this recipe's purchases.");
+                    return;
+                }
+                else
+                    L.LogInfo($"Skip {name} at {NameOf(o.Vendor)} (price {o.Price}, stock {o.Stock}, hops {o.Hops}): over budget");
             }
-        PendingByItem.Clear();
-        PendingOrder.Clear();
-        Seq = 0;
+        }
     }
 
     // ---------- recipe context (Harmony, safe signatures) ----------
 
     static void Reset()
     {
-        FreePending();
+        Rounds.Clear();
+        CurrentItem = null;
         CurrentGhost = IntPtr.Zero;
+        CurrentGhostObj = null;
         CurrentVenueLoc = null;
-        ToBuy.Clear();
-        Bought.Clear();
     }
 
     [HarmonyPatch(typeof(VenueAreaGhost), nameof(VenueAreaGhost.TryPurchaseIngredients))]
     [HarmonyPrefix]
-    static void RecipePre(VenueAreaGhost __instance)
+    static void RecipePre(VenueAreaGhost __instance, float bartertMultiplier, float limit)
     {
         Reset();
-        if (__instance == null) return;
+        if (__instance == null || Detour == null) return;
         CurrentGhost = __instance.Pointer;
+        CurrentGhostObj = __instance;
+        CurrentBarter = bartertMultiplier;
+        CurrentLimit = limit;
         try { CurrentVenueLoc = __instance.Venue?.Location; }
         catch { CurrentVenueLoc = null; }
     }
 
     [HarmonyPatch(typeof(VenueAreaGhost), nameof(VenueAreaGhost.TryPurchaseIngredients))]
     [HarmonyPostfix]
-    [HarmonyPriority(Priority.First)]
-    static void RecipePost(ref bool __result)
+    static void RecipePost()
     {
         try
         {
-            if (CurrentGhost != IntPtr.Zero && PendingOrder.Count > 0 && FlushAll())
-                __result = true;
+            if (Verbose.Value && Rounds.Count > 0) LogRound();
         }
+        catch (Exception e) { L.LogError($"RecipePost: {e.Message}"); }
         finally { Reset(); }
-    }
-
-    [HarmonyPatch(typeof(VenueAreaGhost), nameof(VenueAreaGhost.TryMakePurchase))]
-    [HarmonyPostfix]
-    static void PurchasePost(VenueAreaGhost __instance, ItemType stackType,
-        IL2List boughtInstances, bool __result)
-    {
-        try
-        {
-            if (!__result || CurrentGhost == IntPtr.Zero || stackType == null) return;
-            if (__instance == null || __instance.Pointer != CurrentGhost) return;
-
-            IntPtr key = stackType.Pointer;
-            int n = boughtInstances?.Count ?? 0;
-            Bought[key] = (Bought.TryGetValue(key, out int b) ? b : 0) + n;
-        }
-        catch (Exception e) { L.LogError($"PurchasePost: {e.Message}"); }
     }
 }

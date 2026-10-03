@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>NivalisOrderFixStandalone</AssemblyName>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- Shares the ModKit edition's GUID: off until reworked for patch 1 and tested on its own. -->
+    <!-- Shares the ModKit edition's GUID, so dev builds don't copy it next to that one in plugins.
+         Test it by swapping the DLLs by hand. -->
     <NoDeploy>true</NoDeploy>
-    <NoRelease>true</NoRelease>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="MonoMod.RuntimeDetour">

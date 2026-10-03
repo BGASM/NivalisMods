@@ -3,7 +3,7 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd -W)"
 source "$(dirname "$0")/local.env"
-GVER="${GVER-v1.0-p1}"   # current game build; GVER=v1.0 for the original release
+GVER="${GVER-v1.0-p2}"   # current game build; GVER=v1.0-p1 or v1.0 for earlier ones
 [ "$GVER" = "v1.0" ] && GFOLDER="Nivalis" || GFOLDER="Nivalis/$GVER"
 mkdir -p "$(dirname "$0")/../research/decomp/$GVER"
 OUT="$ROOT/research/decomp/$GVER/callers_$(echo "$1" | tr -c 'A-Za-z0-9_\n' '_').txt"
