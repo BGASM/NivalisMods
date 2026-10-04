@@ -71,7 +71,9 @@ Tested on Nivalis Nights 1.0 (first patch, October 1, 2026) with BepInEx be.788.
 ## Changes
 
 **1.1.0**
-- For the game's first patch, which fixed the over-buy bug. Order Fix now only sets the vendor order, by sorting the game's vendor list; quantities are left to the game.
+- For the patched game (tested on patch 2), which fixed the over-buy bug itself. Order Fix now only sets the vendor order, by sorting the game's vendor list; quantities are left to the game.
+- Verbose logging is one line per vendor bought from and one per run of skipped vendors (with each one's price, stock and hops), with the reason: order filled, or over budget.
+- If the logging hooks ever fail after a game update, only the logging stops; the vendor order keeps working.
 - Settings file renamed to `bgasm.nivalis.orderfix.cfg`, shared with the ModKit edition. 1.0 settings are copied over on first launch.
 - No longer hooks `Vendor.BuyItem`.
 

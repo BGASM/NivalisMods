@@ -1,6 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>NivalisFifo</AssemblyName>
     <Version>0.1.0</Version>
+    <!-- Retired: game patch 2 made it obsolete (the game now uses its least-fresh stock first; Tuning.UseOrder covers
+         custom orders). Kept for reference, out of the solution, never deployed or packaged. -->
+    <NoDeploy>true</NoDeploy>
+    <NoRelease>true</NoRelease>
   </PropertyGroup>
 </Project>
