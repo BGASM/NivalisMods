@@ -106,13 +106,16 @@ public unsafe class Plugin : BasePlugin
         try
         {
             InstallHook();
-            Harmony.CreateAndPatchAll(typeof(Plugin));
-            L.LogInfo($"Manager Order Fix loaded, VendorSort = {VendorSort.Value}");
         }
         catch (Exception e)
         {
             L.LogError($"Manager Order Fix could not hook GetVendorsByItem, inactive: {e}");
+            return;
         }
+        // The Harmony patches only feed Verbose logging; if one fails the vendor sort still works.
+        try { Harmony.CreateAndPatchAll(typeof(Plugin)); }
+        catch (Exception e) { L.LogWarning($"Manager Order Fix: Verbose purchase logging unavailable ({e.Message})"); }
+        L.LogInfo($"Manager Order Fix loaded, VendorSort = {VendorSort.Value}");
     }
 
     // 1.0 used the GUID will.nivalis.orderfix, so its settings are in that file. Copy them to the
@@ -321,12 +324,12 @@ public unsafe class Plugin : BasePlugin
 
     [HarmonyPatch(typeof(Vendor), nameof(Vendor.GetItemBuyCost), new[] { typeof(ItemType), typeof(FoodFreshness) })]
     [HarmonyPostfix]
-    static void PricedPost(Vendor __instance, ItemType item)
+    static void PricedPost(Vendor __instance, ItemType itemType)   // Harmony matches the game's parameter names
     {
         try
         {
             var r = CurrentItem;
-            if (sorting || r == null || __instance == null || item == null || item.Pointer != r.Item) return;
+            if (sorting || r == null || __instance == null || itemType == null || itemType.Pointer != r.Item) return;
             IntPtr v = __instance.Pointer;
             foreach (var o in r.Offers)
                 if (o.Vendor == v) { o.Visited = true; r.Last = o; return; }
@@ -358,27 +361,47 @@ public unsafe class Plugin : BasePlugin
         }
         catch { }
 
+        // In list order: one line per vendor bought from, and one line per run of skipped vendors that still
+        // lists each one's price/stock/hops (to check the sort math). After a purchase the game keeps pricing the
+        // rest of the list without buying, so a vendor skipped after a buy is "order filled"; before any buy,
+        // the recipe's share of the money didn't cover one unit there ("over budget").
         foreach (var r in Rounds)
         {
             string name = NameOf(r.Item);
             int n = r.Offers.Count;
+            bool boughtAny = false;
+            var run = new SCG.List<Offer>();
+            string runReason = null;
+            void Flush()
+            {
+                if (run.Count == 0) return;
+                L.LogInfo($"Skip {name} at {run.Count} vendor{(run.Count == 1 ? "" : "s")} ({runReason}): " +
+                          string.Join(", ", run.Select(o => $"{NameOf(o.Vendor)} {o.Price}/{o.Stock}/{o.Hops}")));
+                run.Clear();
+            }
             foreach (var o in r.Offers)
             {
                 if (o.Bought > 0)
+                {
+                    Flush();
+                    boughtAny = true;
                     L.LogInfo($"Buy {name} x{o.Bought} at {NameOf(o.Vendor)} " +
                               $"(price {o.Price}, stock {o.Stock}, hops {o.Hops}, score {o.Score:0}) [{r.Mode}, {n} vendors]");
-                else if (!o.Visited)
-                    L.LogInfo($"Skip {name} at {NameOf(o.Vendor)} (price {o.Price}, stock {o.Stock}, hops {o.Hops}): order filled");
-                else if (o == r.Last && (int)Math.Round(o.Price * CurrentBarter, MidpointRounding.AwayFromZero) > money)
+                    continue;
+                }
+                if (o.Visited && o == r.Last && (int)Math.Round(o.Price * CurrentBarter, MidpointRounding.AwayFromZero) > money)
                 {
                     // The game's loop stops at the first vendor the venue can't afford.
+                    Flush();
                     L.LogInfo($"Purchase failed for {name} at {NameOf(o.Vendor)} (out of money). " +
                               "The game stopped this recipe's purchases.");
                     return;
                 }
-                else
-                    L.LogInfo($"Skip {name} at {NameOf(o.Vendor)} (price {o.Price}, stock {o.Stock}, hops {o.Hops}): over budget");
+                string reason = boughtAny || !o.Visited ? "order filled" : "over budget";
+                if (reason != runReason) { Flush(); runReason = reason; }
+                run.Add(o);
             }
+            Flush();
         }
     }
 

@@ -23,7 +23,10 @@ START = re.compile(r"Kit Tester\] BuyIngredientsStarting: (.+?) / (.+)$")
 FINISH = re.compile(r"Kit Tester\] BuyIngredientsFinished: ")
 BUY = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Buy (.+?) x(\d+) at (.+?) \(price (\d+), stock (\d+), "
                  r"hops (\d+), score (\d+)\) \[(\w+), (\d+) vendors\]")
-SKIP = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Skip (.+?) at (.+?) \(price (\d+), stock (\d+), hops (\d+)\): order filled")
+# Standalone 1.1+: one line per run of skipped vendors, each "Vendor Name price/stock/hops".
+SKIPS = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Skip (.+?) at \d+ vendors? \((?:order filled|over budget)\): (.+)$")
+SKIP_ONE = re.compile(r"^(.+) (\d+)/(\d+)/(\d+)$")
+SKIP = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Skip (.+?) at (.+?) \(price (\d+), stock (\d+), hops (\d+)\): (?:order filled|over budget)")
 FAIL = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Purchase failed for (.+?) at (.+?) \(")
 # Order Fix 1.x hooked BuyItem itself; from 2.0 the kit's purchasing pipeline prints the line.
 HOOK = re.compile(r"(?:Manager Order Fix(?: \(Standalone\))?|Nivalis ModKit)\] Hooked (?:BuyItem at \S+ |(GetVendorsByItem): )(.*)$")
@@ -64,6 +67,13 @@ def parse(path):
                 item, n, vendor, price, stock, hops, sc, lmode, nv = m.groups()
                 cur["items"][item].append(dict(act="buy", vendor=vendor, n=int(n), price=int(price),
                     stock=int(stock), hops=int(hops), score=int(sc), mode=lmode, line=line))
+            elif m := SKIPS.search(line):
+                item = m.group(1)
+                for part in m.group(2).split(", "):
+                    if p := SKIP_ONE.match(part):
+                        vendor, price, stock, hops = p.groups()
+                        cur["items"][item].append(dict(act="skip", vendor=vendor, price=int(price),
+                            stock=int(stock), hops=int(hops), line=line))
             elif m := SKIP.search(line):
                 item, vendor, price, stock, hops = m.groups()
                 cur["items"][item].append(dict(act="skip", vendor=vendor, price=int(price),
@@ -71,7 +81,9 @@ def parse(path):
             elif m := FAIL.search(line):
                 cur["items"][m.group(1)].append(dict(act="fail", vendor=m.group(2), line=line))
             elif FINISH.search(line):
-                cur = None
+                # Order Fix 2.1 logs a round from its own BuyIngredientsFinished handler, which can run after
+                # KitTester prints the Finished line, so a round's lines run until the next round starts.
+                pass
     return mode, hook, rounds
 
 

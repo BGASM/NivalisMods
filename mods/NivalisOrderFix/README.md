@@ -37,9 +37,20 @@ The other modes change how the city's economy moves: every managed venue in the 
 |---|---|---|
 | `DistanceWeight` | 0.07 | Cost per district hop. Higher stays closer to home. Lower chases discounts. |
 | `ScarcityWeight` | 2.0 | Steers away from shops running low. |
-| `Verbose` | false | Logs each vendor purchase and skip. |
+| `Verbose` | false | Logs every restock round: the vendors bought from, and each skipped vendor's price, stock and hops on one line. Under "Show advanced" in game. |
 
 Hops are counted over the game's travel graph, `WorldLocation.transitions`. Your own district is 0.
+
+## In game
+
+Pause menu > **Mods** > **Manager Order Fix** shows today's results for your venues:
+- the current mode, which you can switch there
+- how many ingredient orders the fix filled, and what they cost
+- the difference from the game's own vendor choice (Cheapest and Balanced usually save money; Local can cost a little more, for nearer vendors)
+
+The counts restart each game day.
+
+For mod developers, the dev command `orderfix` (`orderfix mode=Cheapest` to switch) returns the same numbers. See the kit's dev console.
 
 ## Requirements
 
@@ -74,6 +85,8 @@ Tested on Nivalis Nights 1.0 (first patch, October 1, 2026) with BepInEx be.788.
 
 **2.1.0**
 - Settings can be changed in game through the kit's Mods menu (pause menu > Mods). Requires Nivalis ModKit 0.2.
+- A page in the Mods menu shows today's results and the difference from the game's own vendor choice.
+- Verbose logging is one line per round of skipped vendors instead of one per vendor.
 - `DistanceWeight` is limited to 0–0.5 and `ScarcityWeight` to 0–10, so they show as sliders.
 
 **2.0.0**

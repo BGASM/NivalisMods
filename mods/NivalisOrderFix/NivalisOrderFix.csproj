@@ -5,5 +5,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\NivalisModKit\NivalisModKit.csproj" Private="false" />
+    <!-- The kit's window rows (KitWindow, for the Mods browser page) use TextMeshPro and Unity UI types. -->
+    <Reference Include="Unity.TextMeshPro"><HintPath>$(GameDir)\BepInEx\interop\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>
