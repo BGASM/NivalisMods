@@ -16,7 +16,7 @@ When a manager restocks an ingredient, the game walks its vendor list, most stoc
 
 If a purchase fails, usually because the venue is out of money, that recipe's purchases stop, the same point where the game's own loop stops.
 
-The purchase handling lives in [Nivalis ModKit](../NivalisModKit), which this mod requires.
+The purchase handling lives in [Nivalis ModKit](https://github.com/BGASM/NivalisModKit), which this mod requires.
 
 ## Settings
 
@@ -57,7 +57,7 @@ For mod developers, the dev command `orderfix` (`orderfix mode=Cheapest` to swit
 ## Requirements
 
 - BepInEx. See the [root README](../../README.md).
-- [Nivalis ModKit](../NivalisModKit) 0.2 or later.
+- [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.2 or later.
 
 ## Install
 

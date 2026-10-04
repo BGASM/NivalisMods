@@ -4,7 +4,7 @@
 
 Choose which vendors your managers buy ingredients from: the cheapest, the nearest, or a balance of price, distance and stock. No other mods required.
 
-This is the standalone edition of [Better Supplier Choice](../NivalisOrderFix). Same settings and vendor modes, without [Nivalis ModKit](../NivalisModKit). Install one edition, not both. If both are installed, BepInEx loads only one.
+This is the standalone edition of [Better Supplier Choice](../NivalisOrderFix). Same settings and vendor modes, without [Nivalis ModKit](https://github.com/BGASM/NivalisModKit). Install one edition, not both. If both are installed, BepInEx loads only one.
 
 ## The over-buy bug (fixed by the game)
 

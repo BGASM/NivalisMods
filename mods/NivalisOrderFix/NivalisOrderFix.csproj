@@ -4,7 +4,9 @@
     <Version>2.1.0</Version>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NivalisModKit\NivalisModKit.csproj" Private="false" />
+    <!-- The kit as an outside modder references it: the installed DLL (github.com/BGASM/NivalisModKit). Build and
+         install the kit first; its NivalisModKit.xml beside the DLL gives in-editor docs. -->
+    <Reference Include="NivalisModKit"><HintPath>$(GameDir)\BepInEx\plugins\NivalisModKit.dll</HintPath><Private>false</Private></Reference>
     <!-- The kit's window rows (KitWindow, for the Mods browser page) use TextMeshPro and Unity UI types. -->
     <Reference Include="Unity.TextMeshPro"><HintPath>$(GameDir)\BepInEx\interop\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UI"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
