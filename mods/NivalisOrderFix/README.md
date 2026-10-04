@@ -1,16 +1,18 @@
-# Manager Order Fix
+# Better Supplier Choice
+
+*Formerly Manager Order Fix. Same mod, same settings: the old name described a bug the game has since fixed.*
 
 Choose which vendors your managers buy ingredients from: the cheapest, the nearest, or a balance of price, distance and stock.
 
 ## The over-buy bug (fixed by the game)
 
-Before the game's first patch (October 1, 2026), managers bought the full order from every vendor that stocked an ingredient. Needed 5 potatoes, bought 10. Needed 1 garlic, bought 4 from four shops. Order Fix 1.x existed to fix that.
+Before the game's first patch (October 1, 2026), managers bought the full order from every vendor that stocked an ingredient. Needed 5 potatoes, bought 10. Needed 1 garlic, bought 4 from four shops. Version 1.x, as Manager Order Fix, existed to fix that.
 
-The patch fixed it in the game: managers now keep a running total and stop when the order is filled. Order Fix no longer needs to correct quantities, and doesn't change them. On the patched game it only changes which vendors are used, and in what order.
+The patch fixed it in the game: managers now keep a running total and stop when the order is filled. Better Supplier Choice no longer needs to correct quantities, and doesn't change them. On the patched game it only changes which vendors are used, and in what order.
 
 ## What the mod does
 
-When a manager restocks an ingredient, the game walks its vendor list, most stock first, and buys until the order is filled. Order Fix lets the game work out how much to buy, then has the purchases made in the vendor order you choose. Managers still decide when to reorder and how much, and still buy fresh stock only.
+When a manager restocks an ingredient, the game walks its vendor list, most stock first, and buys until the order is filled. Better Supplier Choice lets the game work out how much to buy, then has the purchases made in the vendor order you choose. Managers still decide when to reorder and how much, and still buy fresh stock only.
 
 If a purchase fails, usually because the venue is out of money, that recipe's purchases stop, the same point where the game's own loop stops.
 
@@ -18,7 +20,7 @@ The purchase handling lives in [Nivalis ModKit](../NivalisModKit), which this mo
 
 ## Settings
 
-Change them in game: pause menu > **Mods** > Manager Order Fix. Changes apply immediately. They're stored in `BepInEx\config\bgasm.nivalis.orderfix.cfg`, created on first launch, which you can also edit directly. Settings from 1.x (`will.nivalis.orderfix.cfg`) are copied over automatically.
+Change them in game: pause menu > **Mods** > Better Supplier Choice. Changes apply immediately. They're stored in `BepInEx\config\bgasm.nivalis.orderfix.cfg`, created on first launch, which you can also edit directly. Settings from 1.x (`will.nivalis.orderfix.cfg`) are copied over automatically.
 
 `VendorSort` picks the vendor order:
 
@@ -43,7 +45,7 @@ Hops are counted over the game's travel graph, `WorldLocation.transitions`. Your
 
 ## In game
 
-Pause menu > **Mods** > **Manager Order Fix** shows today's results for your venues:
+Pause menu > **Mods** > **Better Supplier Choice** shows today's results for your venues:
 - the current mode, which you can switch there
 - how many ingredient orders the fix filled, and what they cost
 - the difference from the game's own vendor choice (Cheapest and Balanced usually save money; Local can cost a little more, for nearer vendors)
@@ -65,9 +67,9 @@ For mod developers, the dev command `orderfix` (`orderfix mode=Cheapest` to swit
 4. Extract this mod's zip into the same folder. The file lands at `BepInEx\plugins\NivalisOrderFix.dll`.
 5. Launch the game.
 
-To confirm it loaded, open `BepInEx\LogOutput.log` and look for `Purchasing pipeline: live` from the kit, then `Manager Order Fix loaded`.
+To confirm it loaded, open `BepInEx\LogOutput.log` and look for `Purchasing pipeline: live` from the kit, then `Better Supplier Choice loaded`.
 
-If the kit is missing, BepInEx skips Order Fix and logs that a dependency is missing.
+If the kit is missing, BepInEx skips Better Supplier Choice and logs that a dependency is missing.
 
 Upgrading from 1.x: install the kit, then replace `NivalisOrderFix.dll`. Your settings carry over.
 
@@ -75,15 +77,14 @@ To uninstall, delete `NivalisOrderFix.dll`. Remove the kit too if nothing else n
 
 ## Compatibility
 
-Works alongside Use Oldest First.
-
 Other mods that change how managers buy ingredients through the kit's `Purchasing` API work alongside it. Mods that hook `Vendor.BuyItem` directly will conflict.
 
-Tested on Nivalis Nights 1.0 (first patch, October 1, 2026) with BepInEx be.788. Without the patch, the over-buy bug is still corrected.
+Tested on Nivalis Nights 1.0 patch 2 (Steam build 25680465) with BepInEx be.788. Without the patch, the over-buy bug is still corrected.
 
 ## Changes
 
 **2.1.0**
+- Renamed from Manager Order Fix to Better Supplier Choice. The GUID, settings file and `NivalisOrderFix.dll` are unchanged, so updating keeps your settings.
 - Settings can be changed in game through the kit's Mods menu (pause menu > Mods). Requires Nivalis ModKit 0.2.
 - A page in the Mods menu shows today's results and the difference from the game's own vendor choice.
 - Verbose logging is one line per round of skipped vendors instead of one per vendor.
@@ -92,7 +93,7 @@ Tested on Nivalis Nights 1.0 (first patch, October 1, 2026) with BepInEx be.788.
 **2.0.0**
 - Requires Nivalis ModKit. The purchase handling moved into the kit, so other mods can adjust vendor order or quantities without conflicting.
 - Settings file renamed to `bgasm.nivalis.orderfix.cfg`. 1.x settings are copied over on first launch.
-- Works with the game's first patch, which fixed the over-buy bug. On the patched game, Order Fix only sets the vendor order.
+- Works with the game's first patch, which fixed the over-buy bug. On the patched game, Better Supplier Choice only sets the vendor order.
 
 **1.0.0**
 - First release.
@@ -101,4 +102,4 @@ Tested on Nivalis Nights 1.0 (first patch, October 1, 2026) with BepInEx be.788.
 
 `BuyItem` takes its `ShopTradeRequest` and `BasicTemp` structs by reference. Harmony's IL2CPP trampoline mishandles by-reference structs and passes garbage to the original. The kit hooks `BuyItem` with a native detour and reads and writes the struct fields through raw pointers at offsets read from the IL2CPP runtime.
 
-Purchases run in two phases. While the game's loop walks its vendor list, the hook copies each request and records price, stock and hop distance without buying. When `TryPurchaseIngredients` finishes, Order Fix sorts the collected vendors by the chosen mode, and the kit calls the original `BuyItem` in that order until the order is filled.
+Purchases run in two phases. While the game's loop walks its vendor list, the hook copies each request and records price, stock and hop distance without buying. When `TryPurchaseIngredients` finishes, Better Supplier Choice sorts the collected vendors by the chosen mode, and the kit calls the original `BuyItem` in that order until the order is filled.

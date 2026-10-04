@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check Order Fix verbose logs for internal consistency.
+"""Check Better Supplier Choice (formerly Manager Order Fix) verbose logs for internal consistency.
 
 Usage: tools/check_orderfix.py LOG [LOG ...] [--hops-ref REF_LOG ...]
 
@@ -21,16 +21,16 @@ DW, SW = 0.07, 2.0
 
 START = re.compile(r"Kit Tester\] BuyIngredientsStarting: (.+?) / (.+)$")
 FINISH = re.compile(r"Kit Tester\] BuyIngredientsFinished: ")
-BUY = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Buy (.+?) x(\d+) at (.+?) \(price (\d+), stock (\d+), "
+BUY = re.compile(r"(?:Manager Order Fix|Better Supplier Choice)(?: \(Standalone\))?\] Buy (.+?) x(\d+) at (.+?) \(price (\d+), stock (\d+), "
                  r"hops (\d+), score (\d+)\) \[(\w+), (\d+) vendors\]")
 # Standalone 1.1+: one line per run of skipped vendors, each "Vendor Name price/stock/hops".
-SKIPS = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Skip (.+?) at \d+ vendors? \((?:order filled|over budget)\): (.+)$")
+SKIPS = re.compile(r"(?:Manager Order Fix|Better Supplier Choice)(?: \(Standalone\))?\] Skip (.+?) at \d+ vendors? \((?:order filled|over budget)\): (.+)$")
 SKIP_ONE = re.compile(r"^(.+) (\d+)/(\d+)/(\d+)$")
-SKIP = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Skip (.+?) at (.+?) \(price (\d+), stock (\d+), hops (\d+)\): (?:order filled|over budget)")
-FAIL = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Purchase failed for (.+?) at (.+?) \(")
+SKIP = re.compile(r"(?:Manager Order Fix|Better Supplier Choice)(?: \(Standalone\))?\] Skip (.+?) at (.+?) \(price (\d+), stock (\d+), hops (\d+)\): (?:order filled|over budget)")
+FAIL = re.compile(r"(?:Manager Order Fix|Better Supplier Choice)(?: \(Standalone\))?\] Purchase failed for (.+?) at (.+?) \(")
 # Order Fix 1.x hooked BuyItem itself; from 2.0 the kit's purchasing pipeline prints the line.
-HOOK = re.compile(r"(?:Manager Order Fix(?: \(Standalone\))?|Nivalis ModKit)\] Hooked (?:BuyItem at \S+ |(GetVendorsByItem): )(.*)$")
-MODE = re.compile(r"Manager Order Fix(?: \(Standalone\))?\] Manager Order Fix loaded, VendorSort = (\w+)")
+HOOK = re.compile(r"(?:(?:Manager Order Fix|Better Supplier Choice)(?: \(Standalone\))?|Nivalis ModKit)\] Hooked (?:BuyItem at \S+ |(GetVendorsByItem): )(.*)$")
+MODE = re.compile(r"(?:Manager Order Fix|Better Supplier Choice)(?: \(Standalone\))?\] (?:Manager Order Fix|Better Supplier Choice) loaded, VendorSort = (\w+)")
 
 
 def sort_key(mode, c):

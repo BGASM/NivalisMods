@@ -28,7 +28,7 @@ public enum SortMode { Vanilla, Cheapest, Local, Balanced }
 // sorted; furniture buying uses the same method and is left alone.
 //
 // Same GUID as the ModKit edition: BepInEx loads only one, and both share bgasm.nivalis.orderfix.cfg.
-[BepInPlugin("bgasm.nivalis.orderfix", "Manager Order Fix (Standalone)", "1.1.0")]
+[BepInPlugin("bgasm.nivalis.orderfix", "Better Supplier Choice (Standalone)", "1.1.0")]   // formerly Manager Order Fix
 public unsafe class Plugin : BasePlugin
 {
     internal static ManualLogSource L;
@@ -109,13 +109,13 @@ public unsafe class Plugin : BasePlugin
         }
         catch (Exception e)
         {
-            L.LogError($"Manager Order Fix could not hook GetVendorsByItem, inactive: {e}");
+            L.LogError($"Better Supplier Choice could not hook GetVendorsByItem, inactive: {e}");
             return;
         }
         // The Harmony patches only feed Verbose logging; if one fails the vendor sort still works.
         try { Harmony.CreateAndPatchAll(typeof(Plugin)); }
-        catch (Exception e) { L.LogWarning($"Manager Order Fix: Verbose purchase logging unavailable ({e.Message})"); }
-        L.LogInfo($"Manager Order Fix loaded, VendorSort = {VendorSort.Value}");
+        catch (Exception e) { L.LogWarning($"Better Supplier Choice: Verbose purchase logging unavailable ({e.Message})"); }
+        L.LogInfo($"Better Supplier Choice loaded, VendorSort = {VendorSort.Value}");
     }
 
     // 1.0 used the GUID will.nivalis.orderfix, so its settings are in that file. Copy them to the
@@ -128,7 +128,7 @@ public unsafe class Plugin : BasePlugin
             if (File.Exists(Config.ConfigFilePath) || !File.Exists(oldPath)) return;
             File.Copy(oldPath, Config.ConfigFilePath);
             Config.Reload();
-            L.LogInfo("Copied settings from will.nivalis.orderfix.cfg (Order Fix 1.0); the old file can be deleted");
+            L.LogInfo("Copied settings from will.nivalis.orderfix.cfg (Manager Order Fix 1.0); the old file can be deleted");
         }
         catch (Exception e) { L.LogWarning($"Could not copy 1.0 settings, using defaults: {e.Message}"); }
     }

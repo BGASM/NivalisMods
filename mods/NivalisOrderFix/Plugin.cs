@@ -16,7 +16,7 @@ public enum SortMode { Vanilla, Cheapest, Local, Balanced }
 // The fix itself (buy what's needed and stop) is the kit's purchasing pipeline, which turns on when this mod adds a
 // VendorOrdering handler. This mod supplies the vendor order, and shows what it did: a page in the kit's Mods
 // browser, a dev command, and an optional verbose log. Written as an example of a kit mod; see the README.
-[BepInPlugin(Guid, "Manager Order Fix", "2.1.0")]
+[BepInPlugin(Guid, "Better Supplier Choice", "2.1.0")]   // formerly Manager Order Fix; GUID, config file and DLL name unchanged
 [BepInDependency(ModKit.Guid, ">=0.2.0")]
 public class Plugin : BasePlugin
 {
@@ -58,16 +58,16 @@ public class Plugin : BasePlugin
         GameEvents.BuyIngredientsFinished += FinishRound;
 
         // What it did today, in the Mods browser and as a dev command; counts restart each game day.
-        ModMenu.AddPage(Guid, "Manager Order Fix", BuildPage);
+        ModMenu.AddPage(Guid, "Better Supplier Choice", BuildPage);
         DevCommands.Register(Guid, "orderfix", "[mode=Vanilla|Cheapest|Local|Balanced]: today's results; mode= switches the vendor order", RunCommand);
         GameEvents.DayStarted += _ => today = new Stats();
         GameEvents.GameLoaded += _ => today = new Stats();
         GameEvents.NewGameStarted += () => today = new Stats();
 
         if (Purchasing.IsAvailable)
-            L.LogInfo($"Manager Order Fix loaded, VendorSort = {VendorSort.Value}");
+            L.LogInfo($"Better Supplier Choice loaded, VendorSort = {VendorSort.Value}");
         else
-            L.LogError("Manager Order Fix: the kit's purchasing pipeline is unavailable, fix inactive");
+            L.LogError("Better Supplier Choice: the kit's purchasing pipeline is unavailable, vendor order inactive");
     }
 
     // 1.x used the GUID will.nivalis.orderfix, so its settings are in that file. Copy them to the
@@ -80,7 +80,7 @@ public class Plugin : BasePlugin
             if (File.Exists(Config.ConfigFilePath) || !File.Exists(oldPath)) return;
             File.Copy(oldPath, Config.ConfigFilePath);
             Config.Reload();
-            L.LogInfo("Copied settings from will.nivalis.orderfix.cfg (Order Fix 1.x); the old file can be deleted");
+            L.LogInfo("Copied settings from will.nivalis.orderfix.cfg (Manager Order Fix 1.x); the old file can be deleted");
         }
         catch (Exception e) { L.LogWarning($"Could not copy 1.x settings, using defaults: {e.Message}"); }
     }
@@ -151,7 +151,7 @@ public class Plugin : BasePlugin
             }
             if (Verbose.Value) LogRound();
         }
-        catch (Exception e) { L.LogWarning($"Order Fix stats: {e.Message}"); }
+        catch (Exception e) { L.LogWarning($"Better Supplier Choice stats: {e.Message}"); }
         finally { round.Clear(); }
     }
 
