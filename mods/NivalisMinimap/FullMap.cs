@@ -54,7 +54,7 @@ internal static class FullMap
         foreach (var (b, _) in badges) if (b != null) UnityEngine.Object.Destroy(b.gameObject);
         badges.Clear();
         foreach (var v in Markers.All)
-            if (v.Badge != null || v.Stall != null) badges.Add((Markers.MakeBadge(v, badgeLayer), v));
+            badges.Add((Markers.MakeBadge(v, badgeLayer), v));
 
         // Start fitted to the whole district.
         var size = ViewSize();
@@ -114,6 +114,7 @@ internal static class FullMap
         foreach (var (badge, v) in badges)
         {
             if (badge == null) continue;
+            if (v.Target != null) v.Position = v.Target.position;   // moving targets (a quest on a walking NPC)
             var p = ToView(v.Position);
             bool inside = Inside(p, size, 0f);
             badge.gameObject.SetActive(inside);

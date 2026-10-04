@@ -1,10 +1,6 @@
 using System;
-using System.Collections.Generic;
-using Il2CppInterop.Runtime;
-using Nivalis;
 using NivalisModKit;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace NivalisMinimap;
@@ -25,8 +21,8 @@ internal class MinimapBehaviour : MonoBehaviour
 
 // The round minimap in a screen corner. The map image is built once per district (MapSource); each frame only moves
 // and turns it: which part of the image shows (uvRect), its rotation, the arrow's rotation and the north marker.
-// It shows when the game's own HUD shows, and fades with it (dialogue, cutscenes), and hides while a menu is open: any
-// game panel that takes the mouse (the HUD itself stays up underneath menus).
+// Visibility is the kit's Ui.GameHudAlpha: the game HUD's fade (dialogue, cutscenes), and hidden while a menu is open.
+// Heading is the kit's Player.Heading (the game camera's; the body doesn't turn when the player looks around).
 internal static class Hud
 {
     // The map image is this much wider than the circle, so it still covers the circle when rotated.
@@ -39,30 +35,7 @@ internal static class Hud
     static RawImage mapImage;
     static MapImage map;
     static string sceneSeen;
-    static float sceneCheckAt, buildAt = -1f, cameraCheckAt;
-    static Camera gameCamera;
-    static readonly List<UIPanel> openMenus = new();
-
-    internal static void Install()
-    {
-        GameEvents.PanelShown += a =>
-        {
-            var p = a.Panel;
-            if (p != null && p.requiresMouse && !openMenus.Exists(m => m != null && m.Pointer == p.Pointer)) openMenus.Add(p);
-        };
-        GameEvents.PanelHidden += a =>
-        {
-            var p = a.Panel;
-            if (p != null) openMenus.RemoveAll(m => m == null || m.Pointer == p.Pointer);
-        };
-    }
-
-    // A menu is open: a tracked panel that's still visible (rechecked, in case a close went unreported).
-    static bool MenuOpen()
-    {
-        openMenus.RemoveAll(m => m == null || !m.IsVisible);
-        return openMenus.Count > 0;
-    }
+    static float sceneCheckAt, buildAt = -1f;
     static bool forceRebuild, failed;
     static bool toggledOff;
 
@@ -73,6 +46,16 @@ internal static class Hud
         Plugin.L.LogError($"Minimap: HUD stopped: {e}");
         if (root != null) root.SetActive(false);
     }
+
+    // For tests (dev command "minimap state"): how visible the minimap is and whose map it holds.
+    internal static object State() => new
+    {
+        alpha = group != null ? System.Math.Round(group.alpha, 2) : 0.0,
+        mapScene = map?.Scene,
+        scene = Scenes.Active,
+        fullMapOpen = FullMap.IsOpen,
+        hudAlpha = System.Math.Round(Ui.GameHudAlpha, 2),
+    };
 
     // Redraw the current district's map (style changed, or the player asked).
     internal static void Rebuild()
@@ -94,12 +77,18 @@ internal static class Hud
             return;
         }
 
-        // A new scene (district, interior): build its map shortly after it settles.
+        // A new scene (district, interior, curfew): hide at once (the old map would be wrong here), and build its map
+        // shortly after it settles. The minimap only shows again once that map is ready.
         if (Time.unscaledTime >= sceneCheckAt)
         {
-            sceneCheckAt = Time.unscaledTime + 1f;
-            string scene = SceneManager.GetActiveScene().name;
-            if (scene != sceneSeen) { sceneSeen = scene; buildAt = Time.unscaledTime + 1.5f; }
+            sceneCheckAt = Time.unscaledTime + 0.25f;
+            string scene = Scenes.Active;
+            if (scene != sceneSeen)
+            {
+                sceneSeen = scene;
+                buildAt = Time.unscaledTime + 1.5f;
+                if (map != null && map.Scene != scene) UnloadMap();
+            }
         }
         if (buildAt >= 0f && Time.unscaledTime >= buildAt)
         {
@@ -109,26 +98,25 @@ internal static class Hud
         if (map == null) { FullMap.Close(); SetAlpha(0f); return; }
         Markers.ScanStep();
 
-        float hudAlpha = GameHudAlpha();
-        bool menu = Ui.IsMenuModeRequested || MenuOpen();   // menus, the dev console
-        var player = PlayerTransform();
+        var player = Player.Transform;
+        float hudAlpha = Ui.GameHudAlpha;   // 0 over menus and the dev console
 
         // The full map: its key opens it during play (not over a menu) and closes it.
         if (kb != null && Plugin.FullMapKeyValue is { } fullKey && kb[fullKey].wasPressedThisFrame)
-            FullMap.Toggle(map, hudAlpha > 0f && !menu && player != null);
+            FullMap.Toggle(map, hudAlpha > 0f && player != null);
         if (FullMap.IsOpen)
         {
             SetAlpha(0f);
-            if (player != null) FullMap.Update(player.position, Heading(player));
+            if (player != null) FullMap.Update(player.position, Player.Heading);
             return;
         }
 
-        if (toggledOff || menu) hudAlpha = 0f;
+        if (toggledOff) hudAlpha = 0f;
         SetAlpha(hudAlpha * Plugin.Opacity.Value);
         if (hudAlpha <= 0f || player == null) return;
 
         Layout();
-        float heading = Heading(player);
+        float heading = Player.Heading;
         float mapTurn = Plugin.RotateWithCamera.Value ? heading : 0f;
 
         // The part of the image around the player: Zoom metres across the circle (more across the overscanned image).
@@ -149,11 +137,14 @@ internal static class Hud
         north.gameObject.SetActive(Plugin.RotateWithCamera.Value);
     }
 
-    // Where the player looks: the game camera's heading (the body may not turn; the camera does).
-    static float Heading(Transform player)
+    // The old scene's map, gone: nothing shows until the new one is loaded.
+    static void UnloadMap()
     {
-        var cam = GameCamera();
-        return cam != null ? cam.transform.eulerAngles.y : player.eulerAngles.y;
+        FullMap.Close();
+        if (map?.Texture != null) UnityEngine.Object.Destroy(map.Texture);
+        map = null;
+        Markers.Clear();
+        SetAlpha(0f);
     }
 
     static void LoadMap()
@@ -167,41 +158,6 @@ internal static class Hud
         if (map == null) return;
         Build();
         mapImage.texture = map.Texture;
-    }
-
-    // The camera drawing the game: enabled, on screen (not into a texture), drawing the world (Default layer), and the
-    // last to draw among those. Rechecked once a second; cameras change with scenes and cutscenes.
-    static Camera GameCamera()
-    {
-        if (gameCamera != null && Time.unscaledTime < cameraCheckAt) return gameCamera;
-        cameraCheckAt = Time.unscaledTime + 1f;
-        Camera best = null;
-        foreach (var o in UnityEngine.Object.FindObjectsOfType(Il2CppType.Of<Camera>()))
-        {
-            var c = o.TryCast<Camera>();
-            if (c == null || !c.enabled || !c.gameObject.activeInHierarchy || c.targetTexture != null) continue;
-            if ((c.cullingMask & 1) == 0) continue;
-            if (best == null || c.depth > best.depth) best = c;
-        }
-        if (best != null && (gameCamera == null || best.Pointer != gameCamera.Pointer))
-            Plugin.L.LogInfo($"Minimap: following camera '{best.gameObject.name}' (depth {best.depth})");
-        gameCamera = best;
-        return best;
-    }
-
-    // The game's HUD visibility and fade, 0..1.
-    static float GameHudAlpha()
-    {
-        var hud = HeadsUpDisplayUI.Instance;
-        if (hud == null || !hud.IsVisible) return 0f;
-        var cg = hud._canvasGroup;
-        return cg != null ? cg.alpha : 1f;
-    }
-
-    static Transform PlayerTransform()
-    {
-        try { return Singleton<PlayerManager>.InstanceExist(out var pm) ? pm.LocalPlayer?.PlayerGameObject?.transform : null; }
-        catch { return null; }
     }
 
     static void SetAlpha(float alpha)

@@ -15,11 +15,12 @@ namespace NivalisMinimap;
 
 // A minimap for Nivalis Nights. Each district's map is made on the player's machine the first time they visit (a
 // satellite photo from above, or a drawing of its walkable ground), cached, and shown in a round HUD corner map.
-// Dev commands (minimap dump / shot / lights / renderers) are the research tools it was built with.
+// Built on the kit's world APIs (0.4): Navigation, Photo, Player, Ui.GameHudAlpha, World.Places, Economy.Stalls,
+// Venues.Entrances, Quests.Markers. Dev command "minimap": the research tools it was built with (DevTools).
 public enum QuestMarkerMode { Pinned, All, Off }
 
 [BepInPlugin(Guid, "Nivalis Minimap", "0.1.0")]
-[BepInDependency(ModKit.Guid, ">=0.3.0")]
+[BepInDependency(ModKit.Guid, ">=0.4.0")]   // Navigation, Photo, Player, World.Places, Quests.Markers...
 public class Plugin : BasePlugin
 {
     const string Guid = "bgasm.nivalis.minimap";
@@ -83,14 +84,9 @@ public class Plugin : BasePlugin
                       "Redraw this district's map if it looks out of date (after moving furniture, or at a better time of day).");
             w.AddButton("Redraw this district's map", Hud.Rebuild);
         });
-        Hud.Install();
         AddComponent<MinimapBehaviour>();
 
-        DevCommands.Register(Guid, "minimap",
-            "This district's navigation mesh: stats; `minimap refresh` redraws the HUD map; `minimap dump [size=1024]` draws it to a PNG; " +
-            "`minimap shot [ppm=10] [cut=3] [exclude=Layer,..] [hide=name,..] [exposure=1] [knee=0.75] [lightcap=3]` photographs it from above; `minimap lights [top=30]` lists lights; " +
-            "`minimap renderers [top=40]` lists what's drawn, by shader and material. Files in BepInEx\\cache\\NivalisMinimap",
-            Run);
+        DevCommands.Register(Guid, "minimap", DevTools.Help, DevTools.Run);
     }
 
     static void ReadToggleKey()
@@ -107,91 +103,4 @@ public class Plugin : BasePlugin
         L.LogWarning($"Minimap: unknown {entry.Definition.Key} '{v}'");
         return null;
     }
-
-    static object Run(CommandArgs a)
-    {
-        if (!GameEvents.IsInGame) throw new InvalidOperationException("load a save first");
-        if (a.Has("refresh")) { Hud.Rebuild(); return new { redrawing = SceneManager.GetActiveScene().name }; }
-        if (a.Has("shot"))
-        {
-            string shotDir = Path.Combine(Paths.CachePath, "NivalisMinimap");
-            Directory.CreateDirectory(shotDir);
-            string scene = string.Join("_", SceneManager.GetActiveScene().name.Split(Path.GetInvalidFileNameChars()));
-            var options = new ShotOptions
-            {
-                PixelsPerMetre = Math.Clamp(a.GetFloat("ppm", 10f), 1f, 40f),
-                CutAbove = a.Has("cut") ? a.GetFloat("cut", 3f) : float.NaN,
-                ExcludeLayers = List(a.Get("exclude")),
-                Hide = List(a.Get("hide")),
-                Exposure = Math.Clamp(a.GetFloat("exposure", 1f), 0.05f, 8f),
-                Knee = Math.Clamp(a.GetFloat("knee", 0.75f), 0.1f, 1f),
-                LightCap = Math.Clamp(a.GetFloat("lightcap", 3f), 0f, 100f),
-            };
-            var result = Shot.Take(options, shotDir, scene);
-            L.LogInfo($"Minimap: shot of {scene} saved");
-            return result;
-        }
-        if (a.Has("lights")) return Shot.Lights(Math.Clamp(a.GetInt("top", 30), 1, 500));
-        if (a.Has("renderers"))
-        {
-            // Also saved: on a busy district the list can take longer than the dev bridge waits for an answer.
-            var list = Shot.Renderers(Math.Clamp(a.GetInt("top", 40), 1, 500));
-            string listDir = Path.Combine(Paths.CachePath, "NivalisMinimap");
-            Directory.CreateDirectory(listDir);
-            File.WriteAllText(Path.Combine(listDir, "renderers.json"), JsonSerializer.Serialize(list, json));
-            return list;
-        }
-        int size = Math.Clamp(a.GetInt("size", 1024), 128, 4096);
-        var started = DateTime.UtcNow;
-        var map = NavMap.Build(a.Has("dump") ? size : 256);
-        if (map == null) throw new InvalidOperationException("no navigation mesh loaded");
-        double buildMs = (DateTime.UtcNow - started).TotalMilliseconds;
-
-        var scenes = Enumerable.Range(0, SceneManager.sceneCount).Select(i => SceneManager.GetSceneAt(i).name).ToArray();
-        var player = PlayerTransform();
-        Vector2? playerPixel = player != null ? map.ToPixel(player.position) : null;
-
-        var info = new
-        {
-            scenes,
-            activeScene = SceneManager.GetActiveScene().name,
-            vertices = map.Vertices,
-            triangles = map.Triangles,
-            trianglesByArea = map.TrianglesByArea.OrderBy(kv => kv.Key).ToDictionary(kv => kv.Key.ToString(), kv => kv.Value),
-            boundsMin = V(map.Min),
-            boundsMax = V(map.Max),
-            sizeMetres = V(map.Max - map.Min),
-            pixelsPerMetre = Math.Round(map.PixelsPerMetre, 3),
-            image = new { width = map.Width, height = map.Height },
-            player = player != null ? V(player.position) : null,
-            playerPixel = playerPixel is { } pp ? new { x = Math.Round(pp.x), y = Math.Round(pp.y) } : null,
-            buildMs = Math.Round(buildMs),
-        };
-        if (!a.Has("dump")) return info;
-
-        if (player != null) map.Marker(player.position, player.forward, new Color32(235, 60, 60, 255));
-        string dir = Path.Combine(Paths.CachePath, "NivalisMinimap");
-        Directory.CreateDirectory(dir);
-        string name = string.Join("_", info.activeScene.Split(Path.GetInvalidFileNameChars()));
-        File.WriteAllBytes(Path.Combine(dir, name + ".png"), map.EncodePng());
-        File.WriteAllText(Path.Combine(dir, name + ".json"), JsonSerializer.Serialize(info, json));
-        L.LogInfo($"Minimap: {name}: {map.Triangles} triangles, {info.sizeMetres.x} x {info.sizeMetres.z} m -> {map.Width}x{map.Height} px in {buildMs:0} ms");
-        return new { file = Path.Combine(dir, name + ".png"), info };
-    }
-
-    static Transform PlayerTransform()
-    {
-        try
-        {
-            return Singleton<PlayerManager>.InstanceExist(out var pm) ? pm.LocalPlayer?.PlayerGameObject?.transform : null;
-        }
-        catch { return null; }
-    }
-
-    static string[] List(string value) =>
-        (value ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-    static Vec V(Vector3 v) => new(Math.Round(v.x, 2), Math.Round(v.y, 2), Math.Round(v.z, 2));
-
-    sealed record Vec(double x, double y, double z);
 }

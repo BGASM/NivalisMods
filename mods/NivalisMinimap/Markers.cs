@@ -1,99 +1,61 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Il2CppInterop.Runtime;
-using Nivalis;
 using Nivalis.Economy;
 using Nivalis.InventorySystem;
-using Nivalis.Apartment;
-using Nivalis.Navigation;
-using Nivalis.UI;
 using NivalisModKit;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace NivalisMinimap;
 
-// Vendor markers: a round badge per vendor stall in the district, ringed in a colour for the kind of shop, holding the
-// icon of something it sells (the game's own item sprite, used at runtime). Stalls are found by their VendorInteraction
-// component. They spawn as the district fills in, so scans back off (1, 2, 4, 8 s...) and stop once two in a row find
-// the same stalls; vendors then stay until the next scene (curfew is a scene change too). Placed every frame.
-//
-// Places: homes (the player's apartment, shelters: free apartments), venues, greenhouses and ways to travel (travel
-// points, boats, trains, lifts), with the compass's own icon and colour. Two sources, both scanned including
-// switched-off objects (the compass only lists what's near; the full map shows everything):
-//  - scene transitions (doors, taxis, trains, boats, lifts: SceneTransitionInteractableBase) carry their compass type
-//    and a portal key naming where they go, so travel badges say "Train > Docks";
-//  - CompassMarker components (apartment doors).
-// Apartments only count when they're shelters (free apartments) or the player owns or rents them; every apartment
-// door has a marker, rented or not.
-//
-// The player's venues: the compass doesn't point at them, so they're found like stalls: the venue sign at each entrance
-// (VenueSignInteraction) whose venue is one the player owns (the kit's Venues.PlayerOwned). Venues the player could
-// buy or rent (acquirable, not theirs) get a dimmed badge, with the prices on the full map's hover.
-//
-// Quests: the compass's quest markers (its live list: the game already moves a quest's marker onto the portal towards an
-// objective in another district). Pinned quests only by default (QuestMarkers setting: Pinned, All, Off). Read once a
-// second; on the minimap a quest off the edge sits on the rim, pointing the way.
+// The map's badges, from the kit's world queries:
+//  - vendor stalls (Economy.Stalls): ringed in a colour for the kind of shop, holding the icon of something they sell
+//    (the game's own item sprite, used at runtime);
+//  - places (World.Places): the player's apartment, shelters, greenhouses, travel points, trains, boats and lifts with
+//    their destinations, in the compass's icon and colour;
+//  - venues (Venues.Entrances): the player's, and dimmed ones they could buy or rent (prices on the full map's hover);
+//  - quests (Quests.Markers): pinned by default; the game routes a marker onto the portal towards another district.
+// Stalls, places and venues appear as a district fills in, so scans back off (1, 2, 4, 8 s...) and stop once two in a
+// row find the same stalls; they then stay until the next scene (curfew is a scene change too). Quests are read once a
+// second. On the minimap a quest off the edge sits on the rim, pointing the way; a quest on a place (a cab towards an
+// objective) stands in for that place's badge.
 internal static class Markers
 {
     internal sealed class Marker
     {
-        public VendorInteraction Stall;
-        public Transform Target;              // places: follow this
-        public NavigationMarkerType Type;
-        public IntPtr Apartment;              // homes: their apartment, to show each once
+        public Vendor Vendor;                 // stalls
+        public Transform Target;              // follow this
         public RectTransform Badge;
         public Vector3 Position;
-        public string Name, Kind, Stock;
+        public string Name;
         public string Detail;                 // second line on the full map's hover (for-sale venues: prices)
         public bool Dim;
-        public IntPtr Quest;                  // quests: their quest, to keep one badge per quest and target
+        public bool IsQuest, IsStall;
+        public IntPtr QuestKey;               // quests: one badge per quest and target
         public Color Colour;
         public Sprite Icon;
     }
 
-    // The district's vendor stalls and places, for the full map.
+    // Everything shown, for the full map.
     internal static IReadOnlyList<Marker> All => Every().Where(Shown).ToList();
 
-    static readonly List<Marker> places = new();
-    static readonly List<Marker> venues = new();
-    static readonly List<Marker> quests = new();
-    static float questsAt;
-
-    static IEnumerable<Marker> Every() => markers.Concat(places).Concat(venues).Concat(quests);
-
-    static bool Shown(Marker m) =>
-        m.Quest != IntPtr.Zero ? Plugin.QuestMarkers.Value != QuestMarkerMode.Off :
-        !UnderQuest(m) && (m.Stall != null ? Plugin.ShowVendors.Value : Plugin.ShowPlaces.Value);
-
-    // A place or stall with a quest badge on it (a cab towards an objective): the quest badge stands in for it.
-    static bool UnderQuest(Marker m) =>
-        m.Target != null && quests.Exists(q => q.Target != null && q.Target.Pointer == m.Target.Pointer) ||
-        m.Stall != null && quests.Exists(q => q.Target != null && (q.Target.position - m.Position).sqrMagnitude < 0.25f);
-
-    // The compass's marker types shown as places, and what to call them.
-    static readonly Dictionary<NavigationMarkerType, string> PlaceNames = new()
-    {
-        [NavigationMarkerType.Apartment] = "Apartment",
-        [NavigationMarkerType.ApartmentCurfew] = "Apartment",
-        [NavigationMarkerType.Shelter] = "Shelter",
-        [NavigationMarkerType.ShelterCurfew] = "Shelter",
-        [NavigationMarkerType.Venue] = "Venue",
-        [NavigationMarkerType.Greenhouse] = "Greenhouse",
-        [NavigationMarkerType.TravelPoint] = "Travel point",
-        [NavigationMarkerType.Boat] = "Boat",
-        [NavigationMarkerType.Train] = "Train",
-        [NavigationMarkerType.Lift] = "Lift",
-        // Not shown here: Quest (quests come later) and Trader (vendors have their own badges).
-    };
-
+    static readonly List<Marker> stalls = new(), places = new(), venues = new(), quests = new();
     static RectTransform layer, questLayer;   // quests draw over every other badge
-    static readonly List<Marker> markers = new();
     static readonly Dictionary<IntPtr, Sprite> iconCache = new();
-    static float scanAt, scanGap;
+    static float scanAt, scanGap, questsAt;
     static int lastCount = -1;
     static bool settled;
+
+    static IEnumerable<Marker> Every() => stalls.Concat(places).Concat(venues).Concat(quests);
+
+    static bool Shown(Marker m) =>
+        m.IsQuest ? Plugin.QuestMarkers.Value != QuestMarkerMode.Off :
+        !UnderQuest(m) && (m.IsStall ? Plugin.ShowVendors.Value : Plugin.ShowPlaces.Value);
+
+    static bool UnderQuest(Marker m) =>
+        quests.Exists(q => q.Target != null && m.Target != null &&
+                           (q.Target.Pointer == m.Target.Pointer || (q.Target.position - m.Position).sqrMagnitude < 0.25f));
 
     // Ring colours by kind of shop (matched on the vendor type's name).
     static readonly (string word, Color colour)[] Kinds =
@@ -113,53 +75,50 @@ internal static class Markers
     internal static void Build(Transform mask)
     {
         if (layer != null) return;
-        var go = new GameObject("Vendors");
-        go.transform.SetParent(mask, false);
-        layer = go.AddComponent<RectTransform>();
-        layer.anchorMin = layer.anchorMax = layer.pivot = new Vector2(0.5f, 0.5f);
-        layer.sizeDelta = Vector2.zero;
-        var q = new GameObject("Quests");
-        q.transform.SetParent(mask, false);
-        questLayer = q.AddComponent<RectTransform>();
-        questLayer.anchorMin = questLayer.anchorMax = questLayer.pivot = new Vector2(0.5f, 0.5f);
-        questLayer.sizeDelta = Vector2.zero;
+        layer = Layer("Badges", mask);
+        questLayer = Layer("Quests", mask);
     }
 
-    // New scene: forget the old stalls and start scanning again.
+    static RectTransform Layer(string name, Transform parent)
+    {
+        var rt = Rect(name, parent);
+        rt.sizeDelta = Vector2.zero;
+        return rt;
+    }
+
+    // New scene: forget everything and start scanning again.
     internal static void Clear()
     {
         foreach (var m in Every()) if (m.Badge != null) UnityEngine.Object.Destroy(m.Badge.gameObject);
-        markers.Clear();
-        places.Clear();
-        venues.Clear();
-        quests.Clear();
-        questsAt = 0f;
-
-        scanAt = 0f;
+        stalls.Clear(); places.Clear(); venues.Clear(); quests.Clear();
+        scanAt = questsAt = 0f;
         scanGap = 1f;
         lastCount = -1;
         settled = false;
     }
 
-    // Each frame, minimap shown or not (the full map uses the stalls too): scan until the district's stalls settle.
+    // Each frame, minimap shown or not (the full map uses the badges too).
     internal static void ScanStep()
     {
-        if (layer != null && Time.unscaledTime >= questsAt)
+        if (layer == null) return;
+        if (Time.unscaledTime >= questsAt)
         {
             questsAt = Time.unscaledTime + 1f;
             ReadQuests();
         }
-
-        if (layer != null && !settled && Time.unscaledTime >= scanAt)
+        if (!settled && Time.unscaledTime >= scanAt)
         {
-            Scan();
+            ReadStalls();
+            ReadPlaces();
+            ReadVenues();
             // Settled: the same stalls twice running (with some found), or nothing after half a minute of looking.
-            settled = (markers.Count == lastCount && markers.Count > 0) || scanGap >= 32f;
-            lastCount = markers.Count;
+            settled = (stalls.Count == lastCount && stalls.Count > 0) || scanGap >= 32f;
+            lastCount = stalls.Count;
             scanAt = Time.unscaledTime + scanGap;
             scanGap *= 2f;
             if (settled)
-                Plugin.L.LogInfo($"Minimap: {markers.Count} vendor stall(s), {venues.Count(v => !v.Dim)} of your venue(s), {venues.Count(v => v.Dim)} for sale, places: " +
+                Plugin.L.LogInfo($"Minimap: {stalls.Count} vendor stall(s), {venues.Count(v => !v.Dim)} of your venue(s), " +
+                                 $"{venues.Count(v => v.Dim)} for sale, places: " +
                                  (places.Count == 0 ? "none" : string.Join(", ", places.GroupBy(p => p.Name).Select(g => $"{g.Key} {g.Count()}"))));
         }
     }
@@ -177,7 +136,7 @@ internal static class Markers
             float dx = (m.Position.x - player.x) * pixelsPerMetre, dz = (m.Position.z - player.z) * pixelsPerMetre;
             var p = new Vector2(dx * cos - dz * sin, dx * sin + dz * cos);   // anticlockwise, as the map image turns
             bool inside = p.magnitude < radius + badgeSize;
-            if (!inside && m.Quest != IntPtr.Zero)
+            if (!inside && m.IsQuest)
             {
                 p = p.normalized * (radius - badgeSize * 0.35f);   // on the rim, towards the objective
                 inside = true;
@@ -189,305 +148,99 @@ internal static class Markers
         }
     }
 
-    // Every place in the scene, switched off or not: scene transitions and compass markers of the place types.
-    static void ScanPlaces()
-    {
-        places.RemoveAll(m =>
-        {
-            bool gone = m.Target == null;
-            if (gone && m.Badge != null) UnityEngine.Object.Destroy(m.Badge.gameObject);
-            return gone;
-        });
-        var seenApartments = new HashSet<IntPtr>(places.Where(m => m.Apartment != IntPtr.Zero).Select(m => m.Apartment));
+    // ---------- sources ----------
 
-        foreach (var portal in SceneObjects<SceneTransitionInteractableBase>())
+    static void ReadStalls()
+    {
+        Prune(stalls);
+        foreach (var s in Economy.Stalls())
         {
-            NavigationMarkerType type;
-            PortalKey key = null;
-            try { type = portal.compassMarkerType; key = portal.keyTo; } catch { continue; }
-            if (!PlaceNames.ContainsKey(type)) continue;
-            string name;
-            Apartment apartment = null;
-            try { apartment = key?.apartment; } catch { }
-            if (IsHome(type) || apartment != null)
+            if (stalls.Exists(m => m.Target != null && m.Target.Pointer == s.Transform.Pointer)) continue;
+            var m = new Marker { Vendor = s.Vendor, Target = s.Transform, Position = s.Position, IsStall = true };
+            m.Name = Economy.NameOf(s.Vendor) ?? "Vendor";
+            string kind = "";
+            try { kind = ((UnityEngine.Object)s.Vendor.type)?.name ?? ""; } catch { }
+            m.Colour = DefaultKind;
+            foreach (var (word, c) in Kinds)
+                if (kind.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0) { m.Colour = c; break; }
+            m.Icon = IconFor(s.Vendor);
+            Add(stalls, m, layer);
+        }
+    }
+
+    static void ReadPlaces()
+    {
+        Prune(places);
+        foreach (var p in World.Places())
+        {
+            if (p.Kind == PlaceKind.Venue) continue;   // venues come from their signs (ReadVenues)
+            if (places.Exists(m => m.Target != null && m.Target.Pointer == p.Transform.Pointer)) continue;
+            Add(places, new Marker
             {
-                if (!HomeName(apartment, out name) || !seenApartments.Add(apartment.Pointer)) continue;
-            }
-            else name = WithDestination(PlaceNames[type], key);
-            AddPlace(portal.transform, type, name, apartment);
+                Target = p.Transform, Position = p.Position, Name = p.ToString(), Colour = p.Colour, Icon = p.Icon,
+            }, layer);
         }
+    }
 
-        foreach (var marker in SceneObjects<CompassMarker>())
+    static void ReadVenues()
+    {
+        Prune(venues);
+        var icon = World.CompassIcon(PlaceKind.Venue, out var colour);
+        foreach (var v in Venues.Entrances())
         {
-            NavigationMarkerType type;
-            try { type = marker.type; } catch { continue; }
-            if (!PlaceNames.ContainsKey(type)) continue;
-            string name = PlaceNames[type];
-            Apartment apartment = null;
-            if (IsHome(type))
+            if (!v.IsPlayers && !v.IsForSale) continue;
+            if (venues.Exists(m => m.Target != null && m.Target.Pointer == v.Transform.Pointer)) continue;
+            var venueIcon = icon;
+            if (venueIcon == null) { try { venueIcon = v.Venue.iconSquare; } catch { } }   // the venue's own icon
+            Add(venues, new Marker
             {
-                apartment = ApartmentOf(marker.transform);
-                if (!HomeName(apartment, out name) || !seenApartments.Add(apartment.Pointer)) continue;
-            }
-            AddPlace(marker.transform, type, name, apartment);
+                Target = v.Transform, Position = v.Position, Name = v.Name ?? (v.IsPlayers ? "Your venue" : "Venue"),
+                Colour = colour, Icon = venueIcon, Dim = v.IsForSale,
+                Detail = v.IsForSale ? $"For sale · buy {v.BuyCost:N0} · rent {v.RentCost:N0}" : null,
+            }, layer);
         }
     }
 
-    static void AddPlace(Transform target, NavigationMarkerType type, string name, Apartment apartment)
-    {
-        if (places.Exists(m => m.Target != null && m.Target.Pointer == target.Pointer)) return;
-        var (icon, colour) = PipLook(type);
-        var m = new Marker
-        {
-            Target = target, Type = type, Position = target.position, Name = name, Kind = type.ToString(),
-            Colour = colour, Icon = icon, Apartment = apartment != null ? apartment.Pointer : IntPtr.Zero,
-        };
-        m.Badge = MakeBadge(m, layer);
-        places.Add(m);
-    }
-
-    static bool IsHome(NavigationMarkerType t) =>
-        t is NavigationMarkerType.Apartment or NavigationMarkerType.ApartmentCurfew or
-             NavigationMarkerType.Shelter or NavigationMarkerType.ShelterCurfew;
-
-    // A home worth showing: a shelter, or an apartment the player owns or rents.
-    static bool HomeName(Apartment apartment, out string name)
-    {
-        name = null;
-        if (apartment == null) return false;
-        try
-        {
-            if (apartment.shelter) { name = "Shelter"; return true; }
-            string id = apartment.Guid;
-            if (Nivalis.Singleton<PlayerManager>.InstanceExist(out var pm) && pm.LocalPlayer?._ownedProperties != null &&
-                pm.LocalPlayer._ownedProperties.Contains(id)) { name = "Your apartment"; return true; }
-            if (Nivalis.Singleton<RentManager>.InstanceExist(out var rm) && rm.rents != null && rm.rents.ContainsKey(id))
-            { name = "Your apartment"; return true; }
-        }
-        catch { }
-        return false;
-    }
-
-    // The apartment an apartment door's marker belongs to: an ApartmentKeyMarkerController above it.
-    static Apartment ApartmentOf(Transform t)
-    {
-        for (var p = t; p != null; p = p.parent)
-        {
-            var controller = p.GetComponent<ApartmentKeyMarkerController>();
-            if (controller != null)
-            {
-                try { return controller.apartment; } catch { return null; }
-            }
-        }
-        return null;
-    }
-
-    // "Train" + its portal key's destination: "Train > Docks" (unless it stays in this district).
-    static string WithDestination(string label, PortalKey key)
-    {
-        try
-        {
-            var where = key?.targetLocation;
-            if (where == null) return label;
-            string name = World.NameOf(where);
-            return string.IsNullOrEmpty(name) ? label : $"{label} > {name}";
-        }
-        catch { return label; }
-    }
-
-    // Components of a type in the loaded scenes, including switched-off ones (Resources.FindObjectsOfTypeAll also
-    // returns prefabs and other assets, which belong to no scene).
-    static IEnumerable<T> SceneObjects<T>() where T : Component
-    {
-        foreach (var o in Resources.FindObjectsOfTypeAll(Il2CppType.Of<T>()))
-        {
-            var c = o.TryCast<T>();
-            if (c == null) continue;
-            var scene = c.gameObject.scene;
-            if (scene.IsValid() && scene.isLoaded) yield return c;
-        }
-    }
-
-    // The compass's icon and colour for a marker type.
-    static (Sprite icon, Color colour) PipLook(NavigationMarkerType type)
-    {
-        try
-        {
-            if (Nivalis.Singleton<NavigationManager>.InstanceExist(out var nav) && nav?.navigationDisplayDictionary != null &&
-                nav.navigationDisplayDictionary.TryGetValue(type, out var pip) && pip != null)
-                return (pip.icon, pip.color.a > 0f ? pip.color : DefaultKind);
-        }
-        catch { }
-        return (null, DefaultKind);
-    }
-
-    // A property's name as the game shows it (localized); else its asset name tidied: "_venue_noodlebar" -> "Noodlebar".
-    static string PropertyName(Nivalis.GhostSystem.CustomerLoop.BaseProperty property, string assetName)
-    {
-        try
-        {
-            string shown = property?.GetName();
-            if (!string.IsNullOrWhiteSpace(shown)) return shown.Trim();
-        }
-        catch { }
-        if (string.IsNullOrEmpty(assetName)) return null;
-        string s = System.Text.RegularExpressions.Regex.Replace(assetName, "^_*venue_*", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        s = System.Text.RegularExpressions.Regex.Replace(s.Replace('_', ' '), "(?<=[a-z])(?=[A-Z])", " ").Trim();
-        return s.Length == 0 ? assetName : char.ToUpperInvariant(s[0]) + s.Substring(1);
-    }
-
-    // The compass's quest markers, filtered to pinned quests (or all, or none).
     static void ReadQuests()
     {
         var mode = Plugin.QuestMarkers.Value;
-        var live = new List<(Transform target, Quest quest, bool pinned, string name)>();
-        if (mode != QuestMarkerMode.Off)
-        {
-            try
-            {
-                var info = new Dictionary<IntPtr, (bool pinned, string name)>();
-                foreach (var rq in Quests.Active)
-                    {
-                        if (rq?.Quest == null) continue;
-                        string title = null;
-                        try { title = rq.Quest.Title; } catch { }
-                        info[rq.Quest.Pointer] = (rq.Pinned, $"#{rq.QuestNumber} {title}".Trim());
-                    }
-                if (Nivalis.Singleton<NavigationManager>.InstanceExist(out var nav) && nav?._markers != null)
-                    foreach (var d in nav._markers)
-                    {
-                        if (d == null || d.Type != NavigationMarkerType.Quest || d.Target == null || d.Quest == null) continue;
-                        info.TryGetValue(d.Quest.Pointer, out var q);
-                        if (mode == QuestMarkerMode.Pinned && !q.pinned) continue;
-                        live.Add((d.Target, d.Quest, q.pinned, q.name ?? "Quest"));
-                    }
-            }
-            catch (Exception e) { Plugin.L.LogWarning($"Minimap: reading quests: {e.Message}"); }
-        }
-
+        var live = mode == QuestMarkerMode.Off ? new List<QuestMarker>() : Quests.Markers(pinnedOnly: mode == QuestMarkerMode.Pinned);
+        IntPtr Key(QuestMarker q) => q.Quest.Pointer;
         quests.RemoveAll(m =>
         {
-            int i = live.FindIndex(l => m.Target != null && l.target.Pointer == m.Target.Pointer && l.quest.Pointer == m.Quest);
-            bool gone = i < 0 || live[i].pinned != !m.Dim;   // gone, or pinned-ness changed (redrawn below)
+            var q = live.FirstOrDefault(l => m.Target != null && l.Target.Pointer == m.Target.Pointer && Key(l) == m.QuestKey);
+            bool gone = q == null || q.Pinned != !m.Dim;   // gone, or pinned-ness changed (redrawn below)
             if (gone && m.Badge != null) UnityEngine.Object.Destroy(m.Badge.gameObject);
             return gone;
         });
-        foreach (var (target, quest, pinned, name) in live)
+        foreach (var q in live)
         {
-            if (quests.Exists(m => m.Target != null && m.Target.Pointer == target.Pointer && m.Quest == quest.Pointer)) continue;
-            var (icon, colour) = PipLook(NavigationMarkerType.Quest);
-            var m = new Marker
+            if (quests.Exists(m => m.Target != null && m.Target.Pointer == q.Target.Pointer && m.QuestKey == Key(q))) continue;
+            Add(quests, new Marker
             {
-                Target = target, Type = NavigationMarkerType.Quest, Position = target.position, Name = name,
-                Kind = "Quest", Colour = colour, Icon = icon, Quest = quest.Pointer, Dim = !pinned,
-            };
-            m.Badge = MakeBadge(m, questLayer);
-            quests.Add(m);
+                Target = q.Target, Position = q.Position, Name = $"#{q.Number} {q.Title}".Trim(), Colour = q.Colour,
+                Icon = q.Icon, IsQuest = true, QuestKey = Key(q), Dim = !q.Pinned,
+            }, questLayer);
         }
     }
 
-    // The player's venues in this scene: signs whose venue they own.
-    static void ScanVenues()
+    static void Add(List<Marker> list, Marker m, Transform parent)
     {
-        var owned = new Dictionary<IntPtr, string>();
-        try
-        {
-            foreach (var area in Venues.PlayerOwned)
-                if (area?.Venue != null) owned[area.Venue.Pointer] = PropertyName(area.Venue, Venues.NameOf(area));
-        }
-        catch { }
-        venues.RemoveAll(m =>
-        {
-            bool gone = m.Target == null;
-            if (gone && m.Badge != null) UnityEngine.Object.Destroy(m.Badge.gameObject);
-            return gone;
-        });
-        foreach (var sign in SceneObjects<VenueSignInteraction>())
-        {
-            var venue = sign.venue;
-            if (venue == null) continue;
-            if (venues.Exists(m => m.Target != null && m.Target.Pointer == sign.transform.Pointer)) continue;
-            bool mine = owned.TryGetValue(venue.Pointer, out var name);
-            bool forSale = false;
-            string detail = null;
-            if (!mine)
-            {
-                try { forSale = venue.IsAcquireable; } catch { }
-                if (!forSale) continue;
-                name = PropertyName(venue, venue.name);
-                try { detail = $"For sale · buy {venue.BuyCost:N0} · rent {venue.RentCost:N0}"; } catch { detail = "For sale"; }
-            }
-            var (icon, colour) = PipLook(NavigationMarkerType.Venue);
-            if (icon == null) { try { icon = sign.venue.iconSquare; } catch { } }   // the venue's own icon
-            var m = new Marker
-            {
-                Target = sign.transform, Type = NavigationMarkerType.Venue, Position = sign.transform.position,
-                Name = string.IsNullOrEmpty(name) ? (mine ? "Your venue" : "Venue") : name, Kind = "Venue",
-                Colour = colour, Icon = icon, Detail = detail, Dim = forSale,
-            };
-            m.Badge = MakeBadge(m, layer);
-            venues.Add(m);
-        }
+        m.Badge = MakeBadge(m, parent);
+        list.Add(m);
     }
 
-    static void Scan()
+    // Drop markers whose objects are gone.
+    static void Prune(List<Marker> list) => list.RemoveAll(m =>
     {
-        ScanVenues();
-        ScanPlaces();
-        markers.RemoveAll(m =>
-        {
-            bool gone = m.Stall == null;
-            if (gone && m.Badge != null) UnityEngine.Object.Destroy(m.Badge.gameObject);
-            return gone;
-        });
-        foreach (var stall in SceneObjects<VendorInteraction>())
-        {
-            var existing = markers.FirstOrDefault(m => m.Stall != null && m.Stall.Pointer == stall.Pointer);
-            if (existing != null) { existing.Position = stall.transform.position; continue; }
-            Vendor vendor = null;
-            try { vendor = stall.definition; } catch { }
-            if (vendor == null) continue;
-            var marker = new Marker { Stall = stall, Position = stall.transform.position };
-            Describe(marker, vendor);
-            marker.Badge = MakeBadge(marker, layer);
-            markers.Add(marker);
-        }
-    }
+        bool gone = m.Target == null;
+        if (gone && m.Badge != null) UnityEngine.Object.Destroy(m.Badge.gameObject);
+        return gone;
+    });
 
-    static void Describe(Marker m, Vendor vendor)
-    {
-        m.Name = Economy.NameOf(vendor) ?? "Vendor";
-        m.Kind = "";
-        try { m.Kind = ((UnityEngine.Object)vendor.type)?.name ?? ""; } catch { }
-        m.Colour = DefaultKind;
-        foreach (var (word, c) in Kinds)
-            if (m.Kind.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0) { m.Colour = c; break; }
-        m.Icon = IconFor(vendor);
-        m.Stock = StockOf(vendor);
-    }
+    // ---------- badges ----------
 
-    // What the vendor stocks, from its offers: tag names ("Herbs") and single items, the first few.
-    static string StockOf(Vendor vendor)
-    {
-        var names = new List<string>();
-        try
-        {
-            var offers = vendor.offerredItems;
-            if (offers != null)
-                foreach (var offer in offers)
-                {
-                    string n = null;
-                    if (offer?.itemType != null) n = Items.NameOf(offer.itemType);
-                    else if (offer?.tag != null) n = ((UnityEngine.Object)offer.tag).name;
-                    if (!string.IsNullOrEmpty(n) && !names.Contains(n)) names.Add(n);
-                }
-        }
-        catch { }
-        if (names.Count == 0) return "";
-        return string.Join(" · ", names.Take(5)) + (names.Count > 5 ? " ..." : "");
-    }
-
-    // A badge: the ring in the shop's colour, a dark centre, and the item icon. Sized by its parent's layout.
+    // A badge: the ring in its colour, a dark centre, and the icon. Sized by its parent's layout.
     internal static RectTransform MakeBadge(Marker m, Transform parent)
     {
         var badge = Rect(m.Name, parent);
@@ -500,13 +253,12 @@ internal static class Markers
         var innerImage = inner.gameObject.AddComponent<Image>();
         innerImage.sprite = Sprites.Circle();
         innerImage.color = new Color(0.08f, 0.09f, 0.11f, 0.95f);
-        var icon = m.Icon;
-        if (icon != null)
+        if (m.Icon != null)
         {
             var iconRect = Rect("Icon", inner);
             Stretch(iconRect, 0.12f);
             var iconImage = iconRect.gameObject.AddComponent<Image>();
-            iconImage.sprite = icon;
+            iconImage.sprite = m.Icon;
             iconImage.preserveAspect = true;
         }
         return badge;

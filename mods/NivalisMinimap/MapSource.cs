@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using BepInEx;
 using UnityEngine;
+using NivalisModKit;
 using UnityEngine.SceneManagement;
 
 namespace NivalisMinimap;
@@ -75,15 +76,26 @@ internal static class MapSource
         }
 
         var started = DateTime.UtcNow;
-        var map = NavMap.Build(4096, 10f);
-        if (map == null) return null;
-        Color32[] pixels = style == MapStyle.Drawn
-            ? map.Pixels
-            : FadeOutside(map, Shot.TakePhoto(map, new ShotOptions
+        var mesh = Navigation.Triangulate();
+        if (mesh == null) return null;
+        NavMap map;
+        Color32[] pixels;
+        if (style == MapStyle.Drawn)
+        {
+            map = NavMap.Draw(mesh, 4096, 10f);
+            pixels = map.Pixels;
+        }
+        else
+        {
+            // Framed on the walkable ground; the walkable mask drawn on the photo's grid fades the outskirts.
+            var photo = Photo.TopDown(mesh.Bounds, new PhotoOptions
             {
-                PixelsPerMetre = map.PixelsPerMetre,
-                CutAbove = style == MapStyle.Cut ? cutHeight : float.NaN,
-            }).Pixels);
+                PixelsPerMetre = 10f,
+                CutAt = style == MapStyle.Cut ? mesh.Bounds.max.y + cutHeight : null,
+            });
+            map = NavMap.Draw(mesh, photo);
+            pixels = FadeOutside(map, photo.Pixels);
+        }
         Frame(pixels, map.Width, map.Height);
 
         var texture = NewTexture(map.Width, map.Height);
@@ -91,7 +103,7 @@ internal static class MapSource
         texture.Apply();
         var image = new MapImage
         {
-            Scene = scene, Texture = texture, MinX = map.Min.x, MinZ = map.Min.z,
+            Scene = scene, Texture = texture, MinX = map.Origin.x, MinZ = map.Origin.y,
             PixelsPerMetre = map.PixelsPerMetre, Width = map.Width, Height = map.Height,
         };
         try

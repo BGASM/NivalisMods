@@ -2,14 +2,10 @@
   <PropertyGroup>
     <AssemblyName>NivalisMinimap</AssemblyName>
     <Version>0.1.0</Version>
-    <!-- Proof of concept: no release zip yet. -->
-    <NoRelease>true</NoRelease>
   </PropertyGroup>
   <ItemGroup>
     <!-- The kit as an outside modder references it: the installed DLL. Build and install the kit first. -->
     <Reference Include="NivalisModKit"><HintPath>$(GameDir)\BepInEx\plugins\NivalisModKit.dll</HintPath><Private>false</Private></Reference>
-    <!-- NavMesh (the walkable surfaces the map is drawn from) and PNG encoding. -->
-    <Reference Include="UnityEngine.AIModule"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.AIModule.dll</HintPath><Private>false</Private></Reference>
     <!-- The HUD (Unity UI, keys) and the Mods-menu page (KitWindow uses TextMeshPro). -->
     <Reference Include="UnityEngine.UI"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UIModule"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
