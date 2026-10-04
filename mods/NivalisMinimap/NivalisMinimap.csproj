@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>NivalisMinimap</AssemblyName>
+    <Version>0.1.0</Version>
+    <!-- Proof of concept: no release zip yet. -->
+    <NoRelease>true</NoRelease>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The kit as an outside modder references it: the installed DLL. Build and install the kit first. -->
+    <Reference Include="NivalisModKit"><HintPath>$(GameDir)\BepInEx\plugins\NivalisModKit.dll</HintPath><Private>false</Private></Reference>
+    <!-- NavMesh (the walkable surfaces the map is drawn from) and PNG encoding. -->
+    <Reference Include="UnityEngine.AIModule"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.AIModule.dll</HintPath><Private>false</Private></Reference>
+    <!-- The HUD (Unity UI, keys) and the Mods-menu page (KitWindow uses TextMeshPro). -->
+    <Reference Include="UnityEngine.UI"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.InputSystem"><HintPath>$(GameDir)\BepInEx\interop\Unity.InputSystem.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>$(GameDir)\BepInEx\interop\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
+    <!-- Il2Cpp HashSet (the player's owned properties). -->
+    <Reference Include="Il2CppSystem.Core"><HintPath>$(GameDir)\BepInEx\interop\Il2CppSystem.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

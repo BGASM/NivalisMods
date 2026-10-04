@@ -2,5 +2,6 @@
   <Folder Name="/mods/">
     <Project Path="mods/NivalisOrderFix/NivalisOrderFix.csproj" />
     <Project Path="mods/NivalisOrderFixStandalone/NivalisOrderFixStandalone.csproj" />
+    <Project Path="mods/NivalisMinimap/NivalisMinimap.csproj" />
   </Folder>
 </Solution>
