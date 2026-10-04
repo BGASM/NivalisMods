@@ -18,7 +18,7 @@ The purchase handling lives in [Nivalis ModKit](../NivalisModKit), which this mo
 
 ## Settings
 
-`BepInEx\config\bgasm.nivalis.orderfix.cfg`, created on first launch. Settings from 1.x (`will.nivalis.orderfix.cfg`) are copied over automatically.
+Change them in game: pause menu > **Mods** > Manager Order Fix. Changes apply immediately. They're stored in `BepInEx\config\bgasm.nivalis.orderfix.cfg`, created on first launch, which you can also edit directly. Settings from 1.x (`will.nivalis.orderfix.cfg`) are copied over automatically.
 
 `VendorSort` picks the vendor order:
 
@@ -44,7 +44,7 @@ Hops are counted over the game's travel graph, `WorldLocation.transitions`. Your
 ## Requirements
 
 - BepInEx. See the [root README](../../README.md).
-- [Nivalis ModKit](../NivalisModKit) 0.1 or later.
+- [Nivalis ModKit](../NivalisModKit) 0.2 or later.
 
 ## Install
 
@@ -71,6 +71,10 @@ Other mods that change how managers buy ingredients through the kit's `Purchasin
 Tested on Nivalis Nights 1.0 (first patch, October 1, 2026) with BepInEx be.788. Without the patch, the over-buy bug is still corrected.
 
 ## Changes
+
+**2.1.0**
+- Settings can be changed in game through the kit's Mods menu (pause menu > Mods). Requires Nivalis ModKit 0.2.
+- `DistanceWeight` is limited to 0–0.5 and `ScarcityWeight` to 0–10, so they show as sliders.
 
 **2.0.0**
 - Requires Nivalis ModKit. The purchase handling moved into the kit, so other mods can adjust vendor order or quantities without conflicting.

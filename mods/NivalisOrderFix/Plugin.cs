@@ -15,8 +15,8 @@ public enum SortMode { Vanilla, Cheapest, Local, Balanced }
 
 // The fix itself (buy what's needed and stop) is the kit's purchasing pipeline, which turns on
 // when this mod adds a VendorOrdering handler. This mod supplies the vendor order.
-[BepInPlugin("bgasm.nivalis.orderfix", "Manager Order Fix", "2.0.0")]
-[BepInDependency(ModKit.Guid)]
+[BepInPlugin("bgasm.nivalis.orderfix", "Manager Order Fix", "2.1.0")]
+[BepInDependency(ModKit.Guid, ">=0.2.0")]
 public class Plugin : BasePlugin
 {
     internal static ManualLogSource L;
@@ -36,13 +36,17 @@ public class Plugin : BasePlugin
         VendorSort = Config.Bind("General", "VendorSort", SortMode.Vanilla,
             "Vendor order when filling an order. Vanilla: most stock first (the game's intent). " +
             "Cheapest: lowest price first. Local: nearest district first. Balanced: weighs price, distance and stock.");
-        DistanceWeight = Config.Bind("Balanced", "DistanceWeight", 0.07f,
+        DistanceWeight = Config.Bind("Balanced", "DistanceWeight", 0.07f, new ConfigDescription(
             "Balanced mode: price penalty per district hop. 0.07 = +7% per hop. " +
-            "Higher prefers nearby vendors; lower chases discounts further away.");
-        ScarcityWeight = Config.Bind("Balanced", "ScarcityWeight", 2.0f,
-            "Balanced mode: penalty for low stock, as price x (1 + ScarcityWeight / stock).");
-        Verbose = Config.Bind("Debug", "Verbose", false,
-            "Log each vendor purchase the fix makes or skips.");
+            "Higher prefers nearby vendors; lower chases discounts further away.",
+            new AcceptableValueRange<float>(0f, 0.5f)));
+        ScarcityWeight = Config.Bind("Balanced", "ScarcityWeight", 2.0f, new ConfigDescription(
+            "Balanced mode: penalty for low stock, as price x (1 + ScarcityWeight / stock).",
+            new AcceptableValueRange<float>(0f, 10f)));
+        Verbose = Config.Bind("Debug", "Verbose", false, new ConfigDescription(
+            "Log each vendor purchase the fix makes or skips.", null, new ModSetting { IsAdvanced = true }));
+        // All settings in the kit's in-game browser (pause menu > Mods); each is read when used, so changes apply live.
+        ModMenu.ListSettings("bgasm.nivalis.orderfix");
 
         Purchasing.VendorOrdering += OrderVendors;
         Purchasing.Decision += LogDecision;
