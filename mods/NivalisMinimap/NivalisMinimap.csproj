@@ -2,6 +2,10 @@
   <PropertyGroup>
     <AssemblyName>NivalisMinimap</AssemblyName>
     <Version>0.1.0</Version>
+    <TsName>NivalisMinimap</TsName>
+    <TsDescription>A satellite minimap and full district map with vendors, travel points, your venues and quests. Maps are made on your machine the first time you visit a district.</TsDescription>
+    <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
+    <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>
   <ItemGroup>
     <!-- The kit as an outside modder references it: the installed DLL. Build and install the kit first. -->

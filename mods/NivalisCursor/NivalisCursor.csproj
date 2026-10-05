@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <AssemblyName>NivalisTimeSpeed</AssemblyName>
+    <AssemblyName>NivalisCursor</AssemblyName>
     <Version>1.0.0</Version>
-    <TsName>NivalisTimeSpeed</TsName>
-    <TsDescription>Run the in-game clock at 0.5x, 1x or 2x speed, set in the Mods menu.</TsDescription>
+    <TsName>NivalisCursor</TsName>
+    <TsDescription>A free mouse cursor on demand (middle mouse button by default): movement and mouse-look pause until you press it again.</TsDescription>
     <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
     <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>
   <ItemGroup>
-    <!-- The kit as an outside modder references it: the installed DLL. Build and install the kit first. -->
     <Reference Include="NivalisModKit"><HintPath>$(GameDir)\BepInEx\plugins\NivalisModKit.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.InputSystem"><HintPath>$(GameDir)\BepInEx\interop\Unity.InputSystem.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>

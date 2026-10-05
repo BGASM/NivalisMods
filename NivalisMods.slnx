@@ -3,6 +3,9 @@
     <Project Path="mods/NivalisOrderFix/NivalisOrderFix.csproj" />
     <Project Path="mods/NivalisOrderFixStandalone/NivalisOrderFixStandalone.csproj" />
     <Project Path="mods/NivalisMinimap/NivalisMinimap.csproj" />
+    <Project Path="mods/NivalisLedger/NivalisLedger.csproj" />
     <Project Path="mods/NivalisTimeSpeed/NivalisTimeSpeed.csproj" />
+    <Project Path="mods/NivalisBorderless/NivalisBorderless.csproj" />
+    <Project Path="mods/NivalisCursor/NivalisCursor.csproj" />
   </Folder>
 </Solution>

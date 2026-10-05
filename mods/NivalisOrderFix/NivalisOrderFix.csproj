@@ -2,6 +2,10 @@
   <PropertyGroup>
     <AssemblyName>NivalisOrderFix</AssemblyName>
     <Version>2.1.0</Version>
+    <TsName>BetterSupplierChoice</TsName>
+    <TsDescription>Choose which vendors your managers buy ingredients from: cheapest, nearest, or a balance of price, distance and stock. Settings in the Mods menu.</TsDescription>
+    <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
+    <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>
   <ItemGroup>
     <!-- The kit as an outside modder references it: the installed DLL (github.com/BGASM/NivalisModKit). Build and

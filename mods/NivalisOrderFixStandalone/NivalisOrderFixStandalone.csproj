@@ -2,6 +2,9 @@
   <PropertyGroup>
     <AssemblyName>NivalisOrderFixStandalone</AssemblyName>
     <Version>1.1.0</Version>
+    <TsName>BetterSupplierChoice_Standalone</TsName>
+    <TsDescription>Better Supplier Choice without Nivalis ModKit: choose the order managers buy from vendors. Install this or the kit edition, not both.</TsDescription>
+    <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Shares the ModKit edition's GUID, so dev builds don't copy it next to that one in plugins.
          Test it by swapping the DLLs by hand. -->
