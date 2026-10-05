@@ -7,6 +7,7 @@ BepInEx plugins for Nivalis Nights, by BGASM.
 | [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) (own repository) | Shared library for other mods: events, settings in a pause-menu Mods browser, UI building blocks. Does nothing on its own. | |
 | [Better Supplier Choice](mods/NivalisOrderFix) (formerly Manager Order Fix) | Choose the order managers buy from vendors: cheapest, nearest, or balanced. | Nivalis ModKit 0.2 |
 | [Nivalis Minimap](mods/NivalisMinimap) | A satellite minimap and full district map with vendors, travel points, your venues and quests. Maps are made on your machine. | Nivalis ModKit 0.4 |
+| [Nivalis Time Speed](mods/NivalisTimeSpeed) | Run the in-game clock at 0.5x, 1x or 2x. | Nivalis ModKit 0.2 |
 | [Better Supplier Choice (Standalone)](mods/NivalisOrderFixStandalone) | The same vendor order without the kit. Install one edition, not both. | |
 | [Use Oldest First](mods/NivalisFifo) | **Retired.** Game patch 2 made it unnecessary: the game now uses its least-fresh stock first. Kept for reference. | |
 

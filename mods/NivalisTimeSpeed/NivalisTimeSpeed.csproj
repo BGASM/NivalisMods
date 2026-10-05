@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>NivalisTimeSpeed</AssemblyName>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The kit as an outside modder references it: the installed DLL. Build and install the kit first. -->
+    <Reference Include="NivalisModKit"><HintPath>$(GameDir)\BepInEx\plugins\NivalisModKit.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

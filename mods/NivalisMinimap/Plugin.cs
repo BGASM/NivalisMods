@@ -26,7 +26,7 @@ public class Plugin : BasePlugin
     const string Guid = "bgasm.nivalis.minimap";
 
     internal static ManualLogSource L;
-    internal static ConfigEntry<bool> Enabled, RotateWithCamera, ShowVendors, ShowPlaces;
+    internal static ConfigEntry<bool> Enabled, RotateWithCamera, ShowVendors, ShowPlaces, AvoidVenuePanel;
     internal static ConfigEntry<MapStyle> Style;
     internal static ConfigEntry<Corner> Corner;
     internal static ConfigEntry<float> Size, Zoom, Opacity, CutHeight, MarginX, MarginY;
@@ -68,6 +68,8 @@ public class Plugin : BasePlugin
             "Key that hides and shows the minimap (a Unity Input System key name, e.g. F6, M, Backslash). Empty: none.");
         FullMapKey = Config.Bind("Minimap", "FullMapKey", "F7",
             "Key that opens the whole district's map (M is the game's travel map). Empty: none.");
+        AvoidVenuePanel = Config.Bind("Layout", "AvoidVenuePanel", true,
+            "Bottom-left corner: lift the minimap above the game's venue panel while it shows (at your venues).");
         MarginX = Config.Bind("Layout", "MarginX", 28f, new ConfigDescription("Distance from the screen's side.",
             new AcceptableValueRange<float>(0f, 600f), new ModSetting { IsAdvanced = true }));
         MarginY = Config.Bind("Layout", "MarginY", 28f, new ConfigDescription("Distance from the screen's top or bottom.",
@@ -84,6 +86,7 @@ public class Plugin : BasePlugin
                       "Redraw this district's map if it looks out of date (after moving furniture, or at a better time of day).");
             w.AddButton("Redraw this district's map", Hud.Rebuild);
         });
+        Hud.Install();
         AddComponent<MinimapBehaviour>();
 
         DevCommands.Register(Guid, "minimap", DevTools.Help, DevTools.Run);

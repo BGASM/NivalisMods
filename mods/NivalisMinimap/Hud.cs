@@ -37,6 +37,28 @@ internal static class Hud
     static string sceneSeen;
     static float sceneCheckAt, buildAt = -1f;
     static bool forceRebuild, failed;
+
+    // The game's venue panel (hours, name, rating) sits in the bottom-left corner while the player is at one of their
+    // venues; the minimap lifts above it while it shows. Height measured at 1080p.
+    const float VenuePanelLift = 250f;
+    static Nivalis.UIPanel venuePanel;
+    static float lift;
+
+    internal static void Install()
+    {
+        GameEvents.PanelShown += a => { if (a.Name == "VenueHUD") venuePanel = a.Panel; };
+    }
+
+    static bool VenuePanelShowing()
+    {
+        try
+        {
+            if (venuePanel == null || !venuePanel.IsVisible) return false;
+            var cg = venuePanel._canvasGroup;
+            return cg == null || cg.alpha > 0.01f;
+        }
+        catch { return false; }
+    }
     static bool toggledOff;
 
     internal static void Fail(Exception e)
@@ -174,8 +196,11 @@ internal static class Hud
         float ax = c is Corner.BottomLeft or Corner.TopLeft ? 0f : 1f;
         float ay = c is Corner.BottomLeft or Corner.BottomRight ? 0f : 1f;
         frame.anchorMin = frame.anchorMax = frame.pivot = new Vector2(ax, ay);
+        // Lift above the venue panel while it shows (bottom-left only, where it sits), sliding rather than jumping.
+        bool clear = Plugin.AvoidVenuePanel.Value && c == Corner.BottomLeft && VenuePanelShowing();
+        lift = Mathf.MoveTowards(lift, clear ? VenuePanelLift : 0f, Time.unscaledDeltaTime * 1000f);
         frame.anchoredPosition = new Vector2(ax == 0f ? Plugin.MarginX.Value : -Plugin.MarginX.Value,
-                                             ay == 0f ? Plugin.MarginY.Value : -Plugin.MarginY.Value);
+                                             ay == 0f ? Plugin.MarginY.Value + lift : -Plugin.MarginY.Value);
         float inner = size - 2f * Ring;
         mapRect.sizeDelta = new Vector2(inner * Overscan, inner * Overscan);
         arrow.sizeDelta = new Vector2(size * 0.077f, size * 0.077f);
