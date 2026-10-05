@@ -165,11 +165,13 @@ function pickTab(t) { tab = t; localStorage.setItem("ledger.tab", t); render(); 
 function dashboard(v) {
   const t = v.today || {};
   const sold = (v.menu || []).filter(m => m.soldToday > 0).sort((a, b) => b.soldToday - a.soldToday);
-  const hist = (v.history || []).concat([{ day: t.day, revenue: t.revenue || 0, ingredients: t.ingredients || 0, wages: t.wages || 0, rent: t.rent || 0, byYou: t.byYou || 0, yourSpending: t.yourSpending || 0, wasted: t.wasted || 0, profit: v.profitToday || 0, today: true }]);
+  const hist = (v.history || []).concat([{ day: t.day, revenue: t.revenue || 0, ingredients: t.ingredients || 0, wages: t.wages || 0, rent: t.rent || 0, byYou: t.byYou || 0, yourSpending: t.yourSpending || 0, wasted: t.wasted || 0, costOfSales: t.costOfSales || 0, tracked: true, profit: v.profitToday || 0, today: true }]);
   return `
   <div class="cards">
-    ${card("Revenue today", money(t.revenue))}${card("Ingredients bought", money(t.ingredients))}
-    ${card("Wages paid", money(t.wages))}${t.rent ? card("Rent", money(t.rent)) : ""}${t.byYou ? card("Carried in by you", money(t.byYou)) : ""}${t.wasted ? card("Spoiled today", `<span class="bad">${money(t.wasted)}</span>`) : ""}${card("Profit today", signed(v.profitToday))}
+    ${card("Revenue today", money(t.revenue))}${card("Cost of sales", money(t.costOfSales))}
+    ${card("Wages paid", money(t.wages))}${t.rent ? card("Rent", money(t.rent)) : ""}${t.wasted ? card("Spoiled today", `<span class="bad">${money(t.wasted)}</span>`) : ""}${card("Profit today", signed(v.profitToday))}
+    ${card("Stock on hand", `${money(v.stockOnHand)}${state.inventoryValue ? `<div class="dim" style="font-size:12px">+ ${money(state.inventoryValue)} carried</div>` : ""}`)}
+    ${card("Stock bought today", `<span class="dim">${money((t.ingredients || 0) + (t.byYou || 0))}</span><div class="dim" style="font-size:11px">a cost once used</div>`)}
     ${card("Sales today", t.sales ?? 0)}${card("Rating", v.rating != null ? `<span class="stars">${stars(v.rating)}</span> <small class="dim">${v.rating}</small>` : "–")}
     ${card("Wages still due", money(v.wagesDueToday))}
   </div>
@@ -309,7 +311,7 @@ function spark(values) {
 // Two bars: income, and costs stacked (ingredients + staff wages). The gap between their tops is the profit.
 function todayBars(t, profit) {
   const income = t.revenue || 0;
-  const parts = [["Ingredients (manager)", t.ingredients || 0, "#ff6b6b"], ["Staff wages", t.wages || 0, "#f0a04b"], ["Rent", t.rent || 0, "#c58bff"], ["Carried in by you", t.byYou || 0, "#ff8fc7"]];
+  const parts = [["Cost of sales", t.costOfSales || 0, "#ff6b6b"], ["Staff wages", t.wages || 0, "#f0a04b"], ["Rent", t.rent || 0, "#c58bff"], ["Spoiled", t.wasted || 0, "#b58a5c"]];
   const costs = parts.reduce((a, p) => a + p[1], 0);
   const top = Math.max(1, income, costs), H = 150, W = 240, bw = 70, pad = 24;
   const h = v => Math.round(v / top * H);
@@ -337,7 +339,7 @@ function todayBars(t, profit) {
 // Lines per day: revenue, ingredients, staff wages, profit. Today is the last point, still filling in.
 function lineChart(days) {
   if (days.length < 2) return `<div class="dim">The chart fills in as days pass (and from the game's records of earlier days).</div>`;
-  const series = [["revenue", "Revenue", "#4fd18b"], ["ingredients", "Ingredients (manager)", "#ff6b6b"], ["wages", "Staff wages", "#f0a04b"], ["rent", "Rent", "#c58bff"], ["byYou", "Carried in by you", "#ff8fc7"], ["profit", "Profit", "#6cb4ff"], ["yourSpending", "Your vendor spending (all, not in profit)", "#8b92a3", true], ["wasted", "Spoiled (cost, already paid)", "#b58a5c", true]];
+  const series = [["revenue", "Revenue", "#4fd18b"], ["costOfSales", "Cost of sales", "#ff6b6b"], ["wages", "Staff wages", "#f0a04b"], ["rent", "Rent", "#c58bff"], ["wasted", "Spoiled", "#b58a5c"], ["profit", "Profit", "#6cb4ff"], ["ingredients", "Stock bought by manager (not a cost yet)", "#ff8fc7", true], ["yourSpending", "Your vendor spending (not a cost yet)", "#8b92a3", true]];
   const W = 900, H = 220, L = 56, R = 12, T = 12, B = 28;
   const values = days.flatMap(d => series.map(([k]) => d[k] || 0));
   const hi = Math.max(1, ...values), lo = Math.min(0, ...values);
@@ -345,7 +347,7 @@ function lineChart(days) {
   const y = v => T + (H - T - B) * (hi - v) / (hi - lo);
   const ticks = [lo, lo + (hi - lo) / 2, hi].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#2a2f3b"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${money(Math.round(v))}</text>`).join("");
   const zero = lo < 0 ? `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="#8b92a3" stroke-dasharray="4 3"/>` : "";
-  const dayTip = d => tipAttr(`<b>Day ${d.day}${d.today ? " (today so far)" : ""}</b>` +
+  const dayTip = d => tipAttr(`<b>Day ${d.day}${d.today ? " (today so far)" : ""}</b>${d.tracked ? "" : `<div class="dim">before the Ledger: no cost of sales</div>`}` +
     series.map(([k, n, c]) => `<div class="row"><span><i style="background:${c}"></i>${n}</span><span>${money(d[k] || 0)}</span></div>`).join(""));
   // A hover band per day (the whole column) underneath, then the lines and points.
   const colW = (W - L - R) / Math.max(1, days.length - 1);

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Usage: tools/decomp.sh 'VenueAreaGhost$$TryPurchaseIngredients' 'Vendor$$BuyItem' ...
-# Ghidra GUI must be closed. Decompiles the current build (patch 2) into research/decomp/v1.0-p2;
-# GVER=v1.0-p1 or GVER=v1.0 for earlier builds.
+# Ghidra GUI must be closed. Decompiles the current build (patch 3) into research/decomp/v1.0-p3;
+# GVER=v1.0-p2, v1.0-p1 or v1.0 for earlier builds.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd -W)"
 source "$(dirname "$0")/local.env"
-GVER="${GVER-v1.0-p2}"   # current game build; GVER=v1.0-p1 or v1.0 for earlier ones
+GVER="${GVER-v1.0-p3}"   # current game build; GVER=v1.0-p2, v1.0-p1 or v1.0 for earlier ones
 [ "$GVER" = "v1.0" ] && GFOLDER="Nivalis" || GFOLDER="Nivalis/$GVER"
 
 "$GHIDRA" "$PROJ_DIR" "$GFOLDER" -process GameAssembly.dll -noanalysis -readOnly \

@@ -79,7 +79,10 @@ internal static class Ledger
         public int YourSpending { get; set; } // all the player's vendor purchases (not in profit: includes furniture etc.)
         public int Wasted { get; set; }       // cost of stock that spoiled (already paid for; not counted again in profit)
         public int Sales { get; set; }
-        public int Profit => Revenue - Ingredients - Wages - Rent - ByYou;
+        public int CostOfSales { get; set; }  // plate cost of each dish when it sold (stock becomes a cost when used)
+        public bool Tracked { get; set; }     // the ledger was running that day (cost of sales known)
+        // Profit counts stock when it's sold or spoils, not when it's bought: buying turns cash into stock.
+        public int Profit => Revenue - CostOfSales - Wasted - Wages - Rent;
     }
 
     internal sealed class Waste { public string Name { get; set; } public int Qty { get; set; } public long Value { get; set; } }
@@ -98,6 +101,8 @@ internal static class Ledger
         public int TrackingSince { get; set; } // the game day the ledger started on this venue
         public int ByYouToday { get; set; }    // value of the player's own purchases put into this venue's storage today
         public Dictionary<string, Waste> WastedToday { get; set; } = new();
+        public int CostOfSalesToday { get; set; }                         // plate costs of sales seen live today
+        public Dictionary<string, int> SoldSeenToday { get; set; } = new(); // dish -> sales seen live today
     }
 
     sealed class Sale { public string Dish; public int Price; public string Time; }
@@ -116,6 +121,7 @@ internal static class Ledger
     static readonly Dictionary<string, Dictionary<string, (string[] dishes, int price)>> openOrders = new();
     static readonly Dictionary<string, List<(string id, string[] dishes, int price, float at)>> doneOrders = new();
     static readonly Dictionary<string, DayRecord> lastToday = new();
+    static readonly Dictionary<string, Dictionary<string, int>> plateCosts = new();   // venue -> dish -> plate cost now
     // Today's stock levels per venue and ingredient, every half hour of game time (for the "running low" sparklines),
     // and what was used and received today (from the half-hourly changes).
     static readonly Dictionary<string, Dictionary<string, List<int>>> stockSeries = new();
@@ -139,6 +145,8 @@ internal static class Ledger
         GameEvents.SaleMade += a => Record(a.Area, b =>
         {
             string dish = Key(a.Meal);
+            if (plateCosts.TryGetValue(KeyOf(a.Area), out var costs) && costs.TryGetValue(dish, out var cost)) b.CostOfSalesToday += cost;
+            b.SoldSeenToday[dish] = (b.SoldSeenToday.TryGetValue(dish, out var seen) ? seen : 0) + 1;
             if (!b.DishesAll.TryGetValue(dish, out var t)) b.DishesAll[dish] = t = new DishTotals { Name = NameOf(a.Meal) };
             t.Sold++;
             t.Revenue += a.Price;
@@ -261,13 +269,15 @@ internal static class Ledger
                     {
                         Day = a.Day, Revenue = today.Revenue, Ingredients = today.Ingredients, Wages = today.Wages,
                         Rent = today.Rent, ByYou = today.ByYou, YourSpending = today.YourSpending, Sales = today.Sales,
-                        Wasted = today.Wasted,
+                        Wasted = today.Wasted, CostOfSales = today.CostOfSales, Tracked = true,
                     });
                     if (b.History.Count > 90) b.History.RemoveAt(0);
                 }
                 b.WagesToday.Clear();
                 b.ByYouToday = 0;
                 b.WastedToday.Clear();
+                b.CostOfSalesToday = 0;
+                b.SoldSeenToday.Clear();
                 stockSeries.Clear();
                 stockFlow.Clear();
                 foreach (var p in b.Bought.Values) { p.QtyToday = 0; p.SpendToday = 0; p.DeliveredToday = 0; }
@@ -525,6 +535,7 @@ internal static class Ledger
                 .GroupBy(r => Key(r.Dish)).ToDictionary(g => g.Key, g => (count: g.Sum(r => r.Count), revenue: g.Sum(r => r.Amount)));
 
             var menuEntries = Venues.MenuOf(area);
+            var costsNow = new Dictionary<string, int>();
             var menu = menuEntries.Select(m =>
             {
                 int cost = 0;
@@ -544,9 +555,22 @@ internal static class Ledger
                     margin = m.Price > 0 ? Math.Round((m.Price - cost) * 100.0 / m.Price, 1) : 0,
                     estimated, ingredients = m.Ingredients.Select(i => NameOf(i.Item)).ToArray(),
                     soldToday = t.count, revenueToday = t.revenue, profitToday = t.count * (m.Price - cost),
+                    costKey = Remember(costsNow, dish, cost),
                     soldAll = all?.Sold ?? 0,
                 };
             }).ToList();
+            plateCosts[key] = costsNow;
+
+            // Today's cost of sales: each sale seen live at its plate cost then; sales from before the ledger saw them
+            // (a mid-day load) at today's plate costs.
+            int cogs = book.CostOfSalesToday;
+            foreach (var (dish, sold) in soldToday)
+            {
+                int seen = book.SoldSeenToday.TryGetValue(dish, out var n) ? n : 0;
+                if (sold.count > seen && costsNow.TryGetValue(dish, out var c)) cogs += (sold.count - seen) * c;
+            }
+            today.CostOfSales = cogs;
+            today.Tracked = true;
 
             // Ingredients: in stock, bought, or on the menu.
             var menuItems = menuEntries.SelectMany(m => m.Ingredients.Select(i => i.Item)).Where(i => i != null).ToList();
@@ -633,7 +657,8 @@ internal static class Ledger
             {
                 key, name = book.Name, district = World.NameOf(Venues.DistrictOf(area)),
                 today, profitToday = today.Profit,
-                history = PastDays(book, allReceipts, key).TakeLast(30).Select(d => new { d.Day, d.Revenue, d.Ingredients, d.Wages, d.Rent, d.ByYou, d.YourSpending, d.Wasted, profit = d.Profit, d.Sales }),
+                history = PastDays(book, allReceipts, key).TakeLast(30).Select(d => new { d.Day, d.Revenue, d.Ingredients, d.Wages, d.Rent, d.ByYou, d.YourSpending, d.Wasted, d.CostOfSales, d.Tracked, profit = d.Profit, d.Sales }),
+                stockOnHand = book.Stock.Values.Sum(l => l.Value),
                 receiptSummary = ReceiptSummary(allReceipts, playerReceipts),
                 mealsServed = Venues.MealsServedOf(area),
                 sales = Feed(key).AsEnumerable().Reverse().Take(20).Select(x => new { dish = x.Dish, price = x.Price, time = x.Time }),
@@ -672,6 +697,7 @@ internal static class Ledger
         {
             day = GameTime.Day, time = Clock(), money = Economy.PlayerMoney, venues, inventory,
             inventoryWastedToday = pocketWasted.Values.Sum(w => w.Value),
+            inventoryValue = pocket.Values.Sum(l => l.Value),
         }, json);
     }
 
@@ -684,7 +710,11 @@ internal static class Ledger
         {
             var record = Day(day, receipts.Where(r => r.Day == day).ToList(), playerReceipts.Where(r => r.Day == day).ToList(), venueKey);
             // Stock carried in by the player is only known for days the ledger tracked.
-            if (days.TryGetValue(day, out var kept)) { record.ByYou = kept.ByYou; record.Wasted = kept.Wasted; }
+            if (days.TryGetValue(day, out var kept))
+            {
+                record.ByYou = kept.ByYou; record.Wasted = kept.Wasted;
+                record.CostOfSales = kept.CostOfSales; record.Tracked = kept.Tracked;
+            }
             days[day] = record;
         }
         return days.Values.OrderBy(d => d.Day);
@@ -746,6 +776,8 @@ internal static class Ledger
             if (list.Count > 48) list.RemoveAt(0);
         }
     }
+
+    static string Remember(Dictionary<string, int> map, string dish, int cost) { map[dish] = cost; return dish; }
 
     // ---------- helpers ----------
 
