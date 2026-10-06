@@ -14,10 +14,14 @@
     <Reference Include="Unity.TextMeshPro"><HintPath>$(GameDir)\BepInEx\interop\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UI"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Il2CppSystem"><HintPath>$(GameDir)\BepInEx\interop\Il2CppSystem.dll</HintPath><Private>false</Private></Reference>
+    <!-- The panel's toggle key. -->
+    <Reference Include="Unity.InputSystem"><HintPath>$(GameDir)\BepInEx\interop\Unity.InputSystem.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Il2CppSystem.Core"><HintPath>$(GameDir)\BepInEx\interop\Il2CppSystem.Core.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
   <ItemGroup>
     <!-- The web page, served from inside the DLL. -->
     <EmbeddedResource Include="web\index.html" LogicalName="NivalisLedger.index.html" />
+    <!-- The in-game panel's layout, exported from ui\panel.html with the kit's UI Studio (tools/ui-studio/export.py). -->
+    <EmbeddedResource Include="ui\panel.layout.json" LogicalName="NivalisLedger.panel.layout.json" />
   </ItemGroup>
 </Project>

@@ -80,6 +80,8 @@
   .empty { color: var(--dim); padding: 30px; text-align: center; }
   .note { color: var(--dim); font-size: 12px; margin: 6px 0 12px; }
   .msg { font-size: 12px; margin-left: 6px; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #2a1416; border: 1px solid var(--bad, #ff6b6b);
+           color: #ffd6d6; padding: 8px 14px; border-radius: 6px; font-size: 13px; display: none; z-index: 10; }
 </style>
 </head>
 <body>
@@ -88,6 +90,7 @@
   <div class="meta" id="clock">waiting for the game...</div>
   <div class="meta" id="money"></div>
   <div class="live" id="live"><b class="off">●</b> not connected</div>
+  <div id="toast"></div>
 </header>
 <div class="shell">
   <nav class="venues" id="venues"></nav>
@@ -103,10 +106,12 @@ const TABS = ["Dashboard", "Menu", "Ingredients", "Orders", "Staff", "Reviews"];
 const COLORS = ["#f2c14e", "#6cb4ff", "#4fd18b", "#ff6b6b", "#c58bff", "#f0a04b", "#5ce0d6", "#ff8fc7", "#a3d65c", "#9aa4b8"];
 let state = null, venueKey = localStorage.getItem("ledger.venue"), tab = localStorage.getItem("ledger.tab") || "Dashboard";
 const open = new Set();        // ingredient rows with their batches shown
-const drafts = {};             // text typed into fields, kept across live updates
+const drafts = {};             // text typed into fields, kept across live updates (and a reload for a new token)
+try { Object.assign(drafts, JSON.parse(sessionStorage.getItem("ledger.drafts") || "{}")); sessionStorage.removeItem("ledger.drafts"); } catch { }
 const seenReviews = new Set(); // reviews already shown (new ones get highlighted)
 let reviewsPrimed = false;
-let pending = false;           // an update arrived while typing
+let pending = false;           // an update arrived while typing or clicking
+let pressing = false;          // a mouse button or touch is down: redrawing now would swallow the click
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -114,17 +119,30 @@ const money = v => v == null ? "–" : (v < 0 ? "-" : "") + (Math.abs(v) / 100).
 const signed = v => `<span class="${v < 0 ? "bad" : v > 0 ? "good" : ""}">${money(v)}</span>`;
 const stars = s => { const n = Math.max(0, Math.min(5, Math.round(s))); return "★".repeat(n) + "☆".repeat(5 - n); };
 
+// Reload with the new token (the game was restarted), keeping what was typed.
+function reloadForToken() {
+  try { sessionStorage.setItem("ledger.drafts", JSON.stringify(drafts)); } catch { }
+  location.reload();
+}
+
+function toast(text) {
+  const t = $("#toast");
+  t.textContent = text; t.style.display = "block";
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.style.display = "none", 5000);
+}
+
 function connect() {
   const es = new EventSource("/api/stream");
-  es.onopen = () => $("#live").innerHTML = `<b>●</b> live`;
-  es.onerror = () => $("#live").innerHTML = `<b class="off">●</b> reconnecting (is the game running?)`;
+  let dropped = false;   // the stream reconnecting may mean the game restarted, with a new token
+  es.onopen = () => { if (dropped) return reloadForToken(); $("#live").innerHTML = `<b>●</b> live`; };
+  es.onerror = () => { dropped = true; $("#live").innerHTML = `<b class="off">●</b> reconnecting (is the game running?)`; };
   es.onmessage = e => { state = JSON.parse(e.data); render(); };
 }
 
 function render() {
   if (!state) return;
   // Don't redraw under the cursor while typing; catch up on blur.
-  if (document.activeElement && document.activeElement.tagName === "INPUT") { pending = true; return; }
+  if (pressing || (document.activeElement && document.activeElement.tagName === "INPUT")) { pending = true; return; }
   pending = false;
   $("#clock").textContent = state.time || "";
   $("#money").textContent = state.money != null ? `Cash ${money(state.money)}` : "";
@@ -154,7 +172,11 @@ document.addEventListener("mousemove", e => {
   tip.style.top = Math.max(8, e.clientY - h - 12) + "px";
 });
 const tipAttr = html => `data-tip="${encodeURIComponent(html)}"`;
-document.addEventListener("focusout", () => setTimeout(() => { if (pending) render(); }, 50));
+document.addEventListener("focusout", () => setTimeout(() => { if (pending && !pressing) render(); }, 50));
+// Catch up after the click has been handled (click fires right after pointerup, before this timeout).
+document.addEventListener("pointerdown", () => { pressing = true; }, true);
+document.addEventListener("pointerup", () => setTimeout(() => { pressing = false; if (pending) render(); }, 0), true);
+document.addEventListener("pointercancel", () => { pressing = false; if (pending) render(); }, true);
 document.addEventListener("input", e => { if (e.target.id) drafts[e.target.id] = e.target.value; });
 
 function pickVenue(k) { venueKey = k; localStorage.setItem("ledger.venue", k); render(); }
@@ -222,7 +244,7 @@ function batchList(i, where) {
   return (i.batches || []).map(b => {
     const id = `b-${b.id}`;
     return `<div style="margin:4px 0">+${b.count} · ${esc(label[b.source] || b.source)} · ${esc(b.time)} · @ ${money(b.unit)}${b.edited ? ` <span class="tag">set by you</span>` : ""}
-      <input class="money" id="${id}" placeholder="new price"> <button class="small" onclick="setBatch('${esc(i.key)}',${b.id},'${id}','${where}')">Set</button></div>`;
+      <input class="money" id="${id}" placeholder="new price" onkeydown="if(event.key==='Enter')setBatch('${esc(i.key)}',${b.id},'${id}','${where}')"> <button class="small" onclick="setBatch('${esc(i.key)}',${b.id},'${id}','${where}')">Set</button></div>`;
   }).join("") || `<span class="dim">No batches yet.</span>`;
 }
 
@@ -230,7 +252,7 @@ function batches(i) {
   const list = batchList(i, venueKey);
   const oid = "ov-" + i.key.replace(/\W/g, "_");
   return `${list}<div style="margin-top:10px" class="dim">Plate cost override (ignores the average):
-    <input class="money" id="${oid}" placeholder="${i.overrideUnit != null ? money(i.overrideUnit) : "e.g. 6.50"}"> <button class="small" onclick="setOverride('${esc(i.key)}','${oid}')">Set</button>
+    <input class="money" id="${oid}" placeholder="${i.overrideUnit != null ? money(i.overrideUnit) : "e.g. 6.50"}" onkeydown="if(event.key==='Enter')setOverride('${esc(i.key)}','${oid}')"> <button class="small" onclick="setOverride('${esc(i.key)}','${oid}')">Set</button>
     ${i.overrideUnit != null ? `<button class="small" onclick="clearOverride('${esc(i.key)}')">Clear</button>` : ""}</div>`;
 }
 
@@ -392,15 +414,24 @@ function toggle(key) { open.has(key) ? open.delete(key) : open.add(key); render(
 
 // ---------- changes ----------
 
+// Every change goes through here. Returns the reply, or { error } (also shown) if it didn't go through.
 async function post(path, body) {
-  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Ledger-Token": TOKEN }, body: JSON.stringify(body) });
-  return r.json();
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Ledger-Token": TOKEN }, body: JSON.stringify(body) });
+    if (r.status === 403) { reloadForToken(); return { error: "the game was restarted: reloading" }; }
+    const res = r.ok ? await r.json() : { error: (await r.text()) || `error ${r.status}` };
+    if (res.error) toast(res.error);
+    return res;
+  } catch (e) {
+    toast("couldn't reach the game (is it running?)");
+    return { error: String(e) };
+  }
 }
 
 async function setLot(key, id, where) {
   const el = document.getElementById(id), msg = document.getElementById(id + "-msg");
   const res = await post("/api/linecost", { venue: where || venueKey, ingredient: key, text: el.value });
-  if (res.error) { msg.className = "msg bad"; msg.textContent = res.error; return; }
+  if (res.error) { if (msg) { msg.className = "msg bad"; msg.textContent = res.error; } return; }
   msg.className = "msg good";
   msg.textContent = res.repriced === 0 ? "nothing estimated to reprice" : res.asked && res.repriced < res.asked ? `${res.repriced} repriced (only ${res.repriced} were estimated)` : `${res.repriced} repriced`;
   el.value = ""; delete drafts[id]; el.blur();
@@ -414,18 +445,31 @@ function parseMoney(text) {
   return t.includes(".") ? Math.round(n * 100) : Math.round(n);   // a dot means currency, else hundredths
 }
 
+// A price field: null if empty (nothing to do), undefined if it isn't a price (said so).
+function priceIn(field) {
+  const unit = parseMoney(document.getElementById(field)?.value);
+  if (unit === undefined) toast("write a price, like 3.30 (or 330 in hundredths)");
+  return unit;
+}
+
+function clearField(field) {
+  delete drafts[field];
+  const el = document.getElementById(field);
+  if (el) { el.value = ""; el.blur(); }
+}
+
 async function setBatch(key, id, field, where) {
-  const unit = parseMoney(document.getElementById(field).value);
+  const unit = priceIn(field);
   if (unit == null) return;
-  await post("/api/batch", { venue: where || venueKey, ingredient: key, id, unit });
-  delete drafts[field]; document.getElementById(field).blur();
+  const res = await post("/api/batch", { venue: where || venueKey, ingredient: key, id, unit });
+  if (!res.error) clearField(field);
 }
 
 async function setOverride(key, field) {
-  const unit = parseMoney(document.getElementById(field).value);
+  const unit = priceIn(field);
   if (unit == null) return;
-  await post("/api/cost", { ingredient: key, unit });
-  delete drafts[field]; document.getElementById(field).blur();
+  const res = await post("/api/cost", { ingredient: key, unit });
+  if (!res.error) clearField(field);
 }
 
 async function clearOverride(key) { await post("/api/cost", { ingredient: key, unit: null }); }

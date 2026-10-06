@@ -15,7 +15,7 @@ namespace NivalisLedger;
 [BepInDependency(ModKit.Guid, ">=0.5.0")]   // Venues.MenuOf / StockOf / OrdersOf / StaffOf / ReviewsOf / ReceiptsOf
 public class Plugin : BasePlugin
 {
-    const string Guid = "bgasm.nivalis.ledger";
+    internal const string Guid = "bgasm.nivalis.ledger";
 
     internal static ManualLogSource L;
     static ConfigEntry<int> port;
@@ -29,6 +29,7 @@ public class Plugin : BasePlugin
         ModMenu.ListSettings(Guid);
 
         Ledger.Install();
+        Panel.Install(Config);
         bool listening = Server.Start(port.Value);
         if (listening) L.LogInfo($"Ledger: open {Server.Url} in a browser");
         ModMenu.AddPage(Guid, "Nivalis Ledger", w =>
@@ -42,10 +43,14 @@ public class Plugin : BasePlugin
     }
 }
 
-// Runs the bookkeeping every frame (it only works once a second).
+// Runs the bookkeeping every frame (it only works once a second), and the in-game panel.
 internal class LedgerBehaviour : MonoBehaviour
 {
     public LedgerBehaviour(IntPtr ptr) : base(ptr) { }
 
-    public void Update() => Ledger.Tick();
+    public void Update()
+    {
+        Ledger.Tick();
+        Panel.Tick();
+    }
 }
