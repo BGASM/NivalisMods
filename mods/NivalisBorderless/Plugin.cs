@@ -13,7 +13,7 @@ namespace NivalisBorderless;
 // title bar and border removed, covering the monitor. (Unity's own "fullscreen window" minimizes when the game loses
 // focus in this build; a plain window doesn't.) The game applies its own screen setting when it starts, so this checks
 // every 2 seconds and applies again if the window changed back. No kit needed.
-[BepInPlugin("bgasm.nivalis.borderless", "Nivalis Borderless", "1.1.1")]
+[BepInPlugin("bgasm.nivalis.borderless", "Nivalis Borderless", "1.0.0")]
 public class Plugin : BasePlugin
 {
     internal static ConfigEntry<bool> Enabled;

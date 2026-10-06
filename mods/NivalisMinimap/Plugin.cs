@@ -19,7 +19,7 @@ namespace NivalisMinimap;
 // Venues.Entrances, Quests.Markers. Dev command "minimap": the research tools it was built with (DevTools).
 public enum QuestMarkerMode { Pinned, All, Off }
 
-[BepInPlugin(Guid, "Nivalis Minimap", "0.1.0")]
+[BepInPlugin(Guid, "Nivalis Minimap", "0.1.1")]
 [BepInDependency(ModKit.Guid, ">=0.4.0")]   // Navigation, Photo, Player, World.Places, Quests.Markers...
 public class Plugin : BasePlugin
 {

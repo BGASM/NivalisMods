@@ -4,7 +4,7 @@ A minimap and a full district map for Nivalis Nights: a satellite view of where 
 
 ## What you get
 
-- **A round minimap** in the bottom-left corner. It turns with your view (a red dot on the rim marks north), shows about 60 metres around you, and hides whenever the game's HUD does: menus, dialogue, cutscenes, fast travel and loading screens. **F6** hides and shows it.
+- **A round minimap** in the bottom-left corner. It turns with your view (a red dot on the rim marks north), shows about 60 metres around you, and hides whenever the game's HUD does: menus, dialogue, cutscenes, fast travel and loading screens. When the game's venue panel is showing (hours, name and rating, bottom left, at one of your venues), a bottom-left minimap slides up above it. **F6** hides and shows it.
 - **A full district map** on **F7**: north up, scroll to zoom towards the cursor, drag to move, hover a badge for its name. **F7** or **Esc** closes it. (M stays the game's travel map.)
 - **Badges:**
   - **Vendors:** ringed in a colour for the kind of shop (produce, butcher, fish, drinks, hardware, furniture...), with something they sell inside.
@@ -57,3 +57,11 @@ With the kit's dev console on, `minimap` lists the research tools: `minimap shot
 ## Credits
 
 By BGASM. Built on [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) and BepInEx.
+
+## Changes
+
+**0.1.1**
+- Moves up above the venue info panel instead of covering it.
+
+**0.1.0**
+- First release.
