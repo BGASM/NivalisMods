@@ -3,7 +3,7 @@
     <AssemblyName>NivalisCursor</AssemblyName>
     <Version>1.0.0</Version>
     <TsName>NivalisCursor</TsName>
-    <TsDescription>A free mouse cursor on demand (middle mouse button by default): movement and mouse-look pause until you press it again.</TsDescription>
+    <TsDescription>A free mouse cursor on demand (scroll-wheel click by default, reassignable): movement and mouse-look pause until you press it again.</TsDescription>
     <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
     <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>

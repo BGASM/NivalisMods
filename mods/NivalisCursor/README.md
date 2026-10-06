@@ -1,12 +1,12 @@
 # Nivalis Cursor
 
-A free mouse cursor whenever you want one: press the **middle mouse button** and the cursor appears while movement and mouse-look pause, as when one of the game's screens is open. Press it again to go back.
+A free mouse cursor whenever you want one: **click the scroll wheel** (the middle mouse button) and the cursor appears while movement and mouse-look pause, as when one of the game's screens is open. Click it again to go back.
 
 Handy with the game borderless next to a browser or another window.
 
 ## Settings
 
-Pause menu > **Mods** > Nivalis Cursor > `Button`: `Middle`, `Back` or `Forward` (mouse buttons), or a keyboard key name such as `F8`.
+Pause menu > **Mods** > Nivalis Cursor > `Button` (default `Middle`, the scroll-wheel click): `Back` or `Forward` (the side mouse buttons), or a keyboard key name such as `F9`.
 
 ## Installation
 
