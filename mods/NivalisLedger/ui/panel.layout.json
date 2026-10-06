@@ -1,0 +1,429 @@
+{
+ "format": "nivalis-layout/1",
+ "name": "ledger",
+ "anchor": "top-left",
+ "offsetX": 24,
+ "offsetY": 24,
+ "w": 374,
+ "h": 509,
+ "children": [
+  {
+   "type": "box",
+   "x": 0,
+   "y": 0,
+   "w": 374,
+   "h": 509,
+   "bg": "#10131ae6",
+   "border": 1,
+   "borderColor": "#f2c14e55",
+   "radius": 12
+  },
+  {
+   "type": "box",
+   "x": 17,
+   "y": 15,
+   "w": 340,
+   "h": 22,
+   "children": [
+    {
+     "type": "text",
+     "x": 0,
+     "y": 1,
+     "w": 67,
+     "h": 20,
+     "text": "LEDGER",
+     "size": 17,
+     "color": "#f2c14eff",
+     "font": "Barlow-ExtraBold, Barlow, sans-serif",
+     "bold": true,
+     "upper": true,
+     "spacing": 1,
+     "align": "left",
+     "valign": "middle"
+    },
+    {
+     "type": "text",
+     "x": 277,
+     "y": 3,
+     "w": 63,
+     "h": 16,
+     "name": "clock",
+     "text": "Day 3 18:22",
+     "size": 13,
+     "color": "#8b92a3ff",
+     "font": "Barlow-Medium, Barlow, sans-serif",
+     "align": "left",
+     "valign": "middle"
+    }
+   ]
+  },
+  {
+   "type": "text",
+   "x": 17,
+   "y": 41,
+   "w": 340,
+   "h": 18,
+   "name": "venue",
+   "text": "Ramen Noir \u00b7 Meridian Market",
+   "size": 13,
+   "color": "#c9ced8ff",
+   "font": "Barlow-Medium, Barlow, sans-serif",
+   "align": "left",
+   "valign": "middle"
+  },
+  {
+   "type": "box",
+   "x": 17,
+   "y": 69,
+   "w": 340,
+   "h": 148,
+   "children": [
+    {
+     "type": "box",
+     "x": 0,
+     "y": 0,
+     "w": 166,
+     "h": 70,
+     "bg": "#1b2030ff",
+     "radius": 8,
+     "children": [
+      {
+       "type": "text",
+       "x": 10,
+       "y": 8,
+       "w": 146,
+       "h": 14,
+       "text": "REVENUE",
+       "size": 11,
+       "color": "#8b92a3ff",
+       "font": "Barlow-Medium, Barlow, sans-serif",
+       "upper": true,
+       "spacing": 0.5,
+       "align": "left",
+       "valign": "middle"
+      },
+      {
+       "type": "text",
+       "x": 10,
+       "y": 40,
+       "w": 146,
+       "h": 22,
+       "name": "revenue",
+       "text": "1,909.00",
+       "size": 21,
+       "color": "#e6e8eeff",
+       "font": "Barlow-ExtraBold, Barlow, sans-serif",
+       "bold": true,
+       "align": "left",
+       "valign": "middle"
+      }
+     ]
+    },
+    {
+     "type": "box",
+     "x": 174,
+     "y": 0,
+     "w": 166,
+     "h": 70,
+     "bg": "#1b2030ff",
+     "radius": 8,
+     "children": [
+      {
+       "type": "text",
+       "x": 10,
+       "y": 8,
+       "w": 146,
+       "h": 14,
+       "text": "COST OF SALES",
+       "size": 11,
+       "color": "#8b92a3ff",
+       "font": "Barlow-Medium, Barlow, sans-serif",
+       "upper": true,
+       "spacing": 0.5,
+       "align": "left",
+       "valign": "middle"
+      },
+      {
+       "type": "text",
+       "x": 10,
+       "y": 40,
+       "w": 146,
+       "h": 22,
+       "name": "cogs",
+       "text": "512.30",
+       "size": 21,
+       "color": "#e6e8eeff",
+       "font": "Barlow-ExtraBold, Barlow, sans-serif",
+       "bold": true,
+       "align": "left",
+       "valign": "middle"
+      }
+     ]
+    },
+    {
+     "type": "box",
+     "x": 0,
+     "y": 78,
+     "w": 166,
+     "h": 70,
+     "name": "profitCard",
+     "bg": "#1b2030ff",
+     "radius": 8,
+     "children": [
+      {
+       "type": "text",
+       "x": 10,
+       "y": 8,
+       "w": 146,
+       "h": 14,
+       "text": "PROFIT",
+       "size": 11,
+       "color": "#8b92a3ff",
+       "font": "Barlow-Medium, Barlow, sans-serif",
+       "upper": true,
+       "spacing": 0.5,
+       "align": "left",
+       "valign": "middle"
+      },
+      {
+       "type": "text",
+       "x": 10,
+       "y": 40,
+       "w": 146,
+       "h": 22,
+       "name": "profit",
+       "text": "1,170.20",
+       "size": 21,
+       "color": "#e6e8eeff",
+       "font": "Barlow-ExtraBold, Barlow, sans-serif",
+       "bold": true,
+       "align": "left",
+       "valign": "middle"
+      }
+     ]
+    },
+    {
+     "type": "box",
+     "x": 174,
+     "y": 78,
+     "w": 166,
+     "h": 70,
+     "bg": "#1b2030ff",
+     "radius": 8,
+     "children": [
+      {
+       "type": "text",
+       "x": 10,
+       "y": 8,
+       "w": 146,
+       "h": 14,
+       "text": "STOCK ON HAND",
+       "size": 11,
+       "color": "#8b92a3ff",
+       "font": "Barlow-Medium, Barlow, sans-serif",
+       "upper": true,
+       "spacing": 0.5,
+       "align": "left",
+       "valign": "middle"
+      },
+      {
+       "type": "text",
+       "x": 10,
+       "y": 40,
+       "w": 146,
+       "h": 22,
+       "name": "stock",
+       "text": "2,891.10",
+       "size": 21,
+       "color": "#e6e8eeff",
+       "font": "Barlow-ExtraBold, Barlow, sans-serif",
+       "bold": true,
+       "align": "left",
+       "valign": "middle"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "type": "text",
+   "x": 17,
+   "y": 229,
+   "w": 340,
+   "h": 14,
+   "text": "RUNNING LOW",
+   "size": 11,
+   "color": "#8b92a3ff",
+   "font": "Barlow-Medium, Barlow, sans-serif",
+   "upper": true,
+   "spacing": 1,
+   "align": "left",
+   "valign": "middle"
+  },
+  {
+   "type": "box",
+   "x": 17,
+   "y": 253,
+   "w": 340,
+   "h": 92,
+   "children": [
+    {
+     "type": "box",
+     "x": 0,
+     "y": 0,
+     "w": 340,
+     "h": 20,
+     "name": "low",
+     "repeat": 4,
+     "stride": 24,
+     "children": [
+      {
+       "type": "text",
+       "x": 0,
+       "y": 2,
+       "w": 120,
+       "h": 16,
+       "name": "name",
+       "text": "Chicken",
+       "size": 13,
+       "color": "#e6e8eeff",
+       "font": "Barlow-Medium, Barlow, sans-serif",
+       "align": "left",
+       "valign": "middle"
+      },
+      {
+       "type": "box",
+       "x": 128,
+       "y": 7,
+       "w": 164,
+       "h": 6,
+       "bg": "#262c3bff",
+       "radius": 3,
+       "children": [
+        {
+         "type": "box",
+         "x": 0,
+         "y": 0,
+         "w": 164,
+         "h": 6,
+         "name": "bar",
+         "bg": "#4fd18bff",
+         "radius": 3,
+         "children": []
+        }
+       ]
+      },
+      {
+       "type": "text",
+       "x": 300,
+       "y": 2,
+       "w": 40,
+       "h": 16,
+       "name": "count",
+       "text": "12",
+       "size": 13,
+       "color": "#c9ced8ff",
+       "font": "Barlow-Medium, Barlow, sans-serif",
+       "align": "right",
+       "valign": "middle"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "type": "text",
+   "x": 17,
+   "y": 357,
+   "w": 340,
+   "h": 14,
+   "text": "RECENT SALES",
+   "size": 11,
+   "color": "#8b92a3ff",
+   "font": "Barlow-Medium, Barlow, sans-serif",
+   "upper": true,
+   "spacing": 1,
+   "align": "left",
+   "valign": "middle"
+  },
+  {
+   "type": "box",
+   "x": 17,
+   "y": 381,
+   "w": 340,
+   "h": 111,
+   "children": [
+    {
+     "type": "text",
+     "x": 0,
+     "y": 0,
+     "w": 125,
+     "h": 16,
+     "name": "noSales",
+     "hidden": true,
+     "text": "No sales since loading",
+     "size": 13,
+     "color": "#8b92a3ff",
+     "font": "Barlow-Medium, Barlow, sans-serif",
+     "align": "left",
+     "valign": "middle"
+    },
+    {
+     "type": "box",
+     "x": 0,
+     "y": 0,
+     "w": 340,
+     "h": 19,
+     "name": "sale",
+     "repeat": 5,
+     "stride": 23,
+     "children": [
+      {
+       "type": "text",
+       "x": 0,
+       "y": 2,
+       "w": 216,
+       "h": 16,
+       "name": "dish",
+       "text": "Tonkotsu Ramen",
+       "size": 13,
+       "color": "#e6e8eeff",
+       "font": "Barlow-Medium, Barlow, sans-serif",
+       "align": "left",
+       "valign": "middle"
+      },
+      {
+       "type": "text",
+       "x": 224,
+       "y": 3,
+       "w": 46,
+       "h": 14,
+       "name": "when",
+       "text": "18:20",
+       "size": 12,
+       "color": "#8b92a3ff",
+       "font": "Barlow-Medium, Barlow, sans-serif",
+       "align": "right",
+       "valign": "middle"
+      },
+      {
+       "type": "text",
+       "x": 278,
+       "y": 1,
+       "w": 62,
+       "h": 17,
+       "name": "price",
+       "text": "24.50",
+       "size": 14,
+       "color": "#4fd18bff",
+       "font": "Barlow-ExtraBold, Barlow, sans-serif",
+       "bold": true,
+       "align": "right",
+       "valign": "middle"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,51 @@
+<!-- The Ledger's in-game panel. Open this in the kit's UI Studio (NivalisModKit/tools/ui-studio/index.html), edit,
+     and export to <game>\BepInEx\config\NivalisLedger\panel.layout.json to see it live in the game; the build ships
+     panel.layout.json next to this file (tools/ui-studio/export.py makes it). ids are what Ledger fills in. -->
+<style>
+  /* Barlow is the game's UI font; the studio preview loads it from Google Fonts, the game uses its own copies by name. */
+  @import url("https://fonts.googleapis.com/css2?family=Barlow:wght@500;800&display=block");
+  body { font-family: "Barlow-Medium", Barlow, sans-serif; font-weight: 500; }
+  .x { font-family: "Barlow-ExtraBold", Barlow, sans-serif; font-weight: 800; }
+  .panel { width: 340px; padding: 14px 16px 16px; background: #10131ae6; border: 1px solid #f2c14e55; border-radius: 12px;
+           display: flex; flex-direction: column; gap: 10px; }
+  .head { display: flex; justify-content: space-between; align-items: center; height: 22px; }
+  .title { font-size: 17px; color: #f2c14e; text-transform: uppercase; letter-spacing: 1px; }
+  .clock { font-size: 13px; color: #8b92a3; }
+  .venue { font-size: 13px; color: #c9ced8; height: 18px; margin-top: -6px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card { background: #1b2030; border-radius: 8px; padding: 8px 10px; height: 54px; display: flex; flex-direction: column; justify-content: space-between; }
+  .k { font-size: 11px; color: #8b92a3; text-transform: uppercase; letter-spacing: 0.5px; height: 14px; }
+  .v { font-size: 21px; color: #e6e8ee; height: 22px; }
+  .section { font-size: 11px; color: #8b92a3; text-transform: uppercase; letter-spacing: 1px; height: 14px; margin-top: 2px; }
+  .low { display: flex; align-items: center; gap: 8px; height: 20px; }
+  .low .name { width: 120px; font-size: 13px; color: #e6e8ee; white-space: nowrap; }
+  .track { flex: 1; height: 6px; background: #262c3b; border-radius: 3px; }
+  .bar { width: 100%; height: 6px; background: #4fd18b; border-radius: 3px; }
+  .low .count { width: 40px; font-size: 13px; color: #c9ced8; text-align: right; }
+  .sale { display: flex; align-items: center; gap: 8px; height: 19px; }
+  .sale .dish { flex: 1; font-size: 13px; color: #e6e8ee; white-space: nowrap; }
+  .sale .when { width: 46px; font-size: 12px; color: #8b92a3; text-align: right; }
+  .sale .price { width: 62px; font-size: 14px; color: #4fd18b; text-align: right; }
+  .sales { position: relative; }
+  .none { position: absolute; left: 0; top: 0; font-size: 13px; color: #8b92a3; }
+  .list { display: flex; flex-direction: column; gap: 4px; }
+</style>
+<div class="panel" id="ledger" data-panel data-anchor="top-left" data-offset="24 24">
+  <div class="head"><span class="title x">Ledger</span><span class="clock" id="clock">Day 3 18:22</span></div>
+  <span class="venue" id="venue">Ramen Noir · Meridian Market</span>
+  <div class="cards">
+    <div class="card"><span class="k">Revenue</span><span class="v x" id="revenue">1,909.00</span></div>
+    <div class="card"><span class="k">Cost of sales</span><span class="v x" id="cogs">512.30</span></div>
+    <div class="card" id="profitCard"><span class="k">Profit</span><span class="v x" id="profit">1,170.20</span></div>
+    <div class="card"><span class="k">Stock on hand</span><span class="v x" id="stock">2,891.10</span></div>
+  </div>
+  <span class="section">Running low</span>
+  <div class="list">
+    <div class="low" id="low" data-repeat="4"><span class="name" id="name">Chicken</span><div class="track"><div class="bar" id="bar"></div></div><span class="count" id="count">12</span></div>
+  </div>
+  <span class="section">Recent sales</span>
+  <div class="list sales">
+    <span class="none" id="noSales" data-hidden>No sales since loading</span>
+    <div class="sale" id="sale" data-repeat="5"><span class="dish" id="dish">Tonkotsu Ramen</span><span class="when" id="when">18:20</span><span class="price x" id="price">24.50</span></div>
+  </div>
+</div>
