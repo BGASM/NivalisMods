@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>NivalisStaffOrder</AssemblyName>
+    <Version>1.0.0</Version>
+    <TsName>NivalisStaffOrder</TsName>
+    <TsDescription>Up and down arrows on your venue's staff list, to put your staff in the order you like. Display only; kept with your save.</TsDescription>
+    <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
+    <TsDependencies>$(KitDependency)</TsDependencies>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The kit as an outside modder references it: the installed DLL. Build and install the kit first. -->
+    <Reference Include="NivalisModKit"><HintPath>$(GameDir)\BepInEx\plugins\NivalisModKit.dll</HintPath><Private>false</Private></Reference>
+    <!-- The staff tab's rows (Unity UI, TextMeshPro). -->
+    <Reference Include="UnityEngine.UI"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>$(GameDir)\BepInEx\interop\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Il2CppSystem"><HintPath>$(GameDir)\BepInEx\interop\Il2CppSystem.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>
