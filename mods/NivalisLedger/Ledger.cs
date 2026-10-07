@@ -645,7 +645,7 @@ internal static class Ledger
                 book.WagesToday.TryGetValue(s.Name ?? "", out var w);
                 return new
                 {
-                    name = s.Name, wage = s.Wage, shift = $"{Hour(s.ShiftStart)}-{Hour(s.ShiftEnd)}", roles = s.Roles,
+                    name = s.Name, wage = s.Wage, shift = $"{Hour(s.ShiftStart)}-{Hour(s.ShiftEnd)}", roles = Roles(s.Roles),
                     paidHours = w?.PaidHours ?? 0, paidToday = w?.Paid ?? 0, missedHours = w?.MissedHours ?? 0,
                     lastPaid = w?.LastPaid, hoursLeft = s.HoursLeftToday, dueToday = s.HoursLeftToday * s.Wage,
                 };
@@ -846,6 +846,19 @@ internal static class Ledger
         if (item == null) return null;
         try { if (!string.IsNullOrWhiteSpace(item.Name)) return item.Name; } catch { }
         return Items.NameOf(item);
+    }
+
+    // Roles as the Staff tab names them: the game's jobs (Cooking -> Cook...) and mod jobs as they are (Bartender).
+    static readonly Dictionary<string, string> JobNames = new()
+    {
+        ["Cooking"] = "Cook", ["Serving"] = "Waiter", ["Cleaning"] = "Cleaner", ["Managing"] = "Manager", ["None"] = "no job",
+    };
+
+    static string Roles(string roles)
+    {
+        if (string.IsNullOrEmpty(roles)) return roles;
+        var parts = roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return string.Join(", ", parts.Select(r => JobNames.TryGetValue(r, out var n) ? n : r));
     }
 
     static string PersonName(Nivalis.GhostSystem.Ai.Person p)
