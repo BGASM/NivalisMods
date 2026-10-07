@@ -9,4 +9,5 @@ research/
 
 # Local debug tooling, not published
 mods/NivalisManagerDebug/
+mods/NivalisCustomerTrace/
 TODO.md

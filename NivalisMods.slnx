@@ -7,5 +7,7 @@
     <Project Path="mods/NivalisTimeSpeed/NivalisTimeSpeed.csproj" />
     <Project Path="mods/NivalisBorderless/NivalisBorderless.csproj" />
     <Project Path="mods/NivalisCursor/NivalisCursor.csproj" />
+    <Project Path="mods/NivalisStaffOrder/NivalisStaffOrder.csproj" />
+    <Project Path="mods/NivalisBartender/NivalisBartender.csproj" />
   </Folder>
 </Solution>
