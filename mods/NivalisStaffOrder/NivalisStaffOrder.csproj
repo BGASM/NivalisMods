@@ -3,7 +3,7 @@
     <AssemblyName>NivalisStaffOrder</AssemblyName>
     <Version>1.0.0</Version>
     <TsName>NivalisStaffOrder</TsName>
-    <TsDescription>Up and down arrows on your venue's staff list, to put your staff in the order you like. Display only; kept with your save.</TsDescription>
+    <TsDescription>Up and down arrows on your venue's staff list, to put your staff in the order you like. Display only, kept with your save.</TsDescription>
     <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
     <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>

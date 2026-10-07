@@ -6,7 +6,7 @@
     <GameDir Condition="'$(GameDir)' == ''">H:\SteamLibrary\steamapps\common\Nivalis Nights</GameDir>
     <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
     <!-- Thunderstore dependency on the kit for mods that need it (the current kit release). -->
-    <KitDependency>BGASM-NivalisModKit-0.5.0</KitDependency>
+    <KitDependency>BGASM-NivalisModKit-0.6.0</KitDependency>
   </PropertyGroup>
 
   <ItemGroup>

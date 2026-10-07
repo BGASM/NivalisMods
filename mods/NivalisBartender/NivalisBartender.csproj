@@ -3,18 +3,13 @@
     <AssemblyName>NivalisBartender</AssemblyName>
     <Version>1.0.0</Version>
     <TsName>NivalisBartender</TsName>
-    <TsDescription>A BAR toggle for your cooks: bartenders make the drinks, the other cooks stick to food. Frees your kitchen when beer is half of every order.</TsDescription>
+    <TsDescription>A Bartender job for your venue staff: bartenders prep and plate the drinks, cooks stick to food. Drinks can use cooking, serving or both skills. Frees your kitchen when beer is half of every order.</TsDescription>
     <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
     <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>
   <ItemGroup>
     <!-- The kit as an outside modder references it: the installed DLL. Build and install the kit first. -->
     <Reference Include="NivalisModKit"><HintPath>$(GameDir)\BepInEx\plugins\NivalisModKit.dll</HintPath><Private>false</Private></Reference>
-    <!-- The staff tab's rows (Unity UI, TextMeshPro). -->
-    <Reference Include="UnityEngine.UI"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.UIModule"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="Unity.TextMeshPro"><HintPath>$(GameDir)\BepInEx\interop\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameDir)\BepInEx\interop\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Il2CppSystem"><HintPath>$(GameDir)\BepInEx\interop\Il2CppSystem.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
   <ItemGroup>
