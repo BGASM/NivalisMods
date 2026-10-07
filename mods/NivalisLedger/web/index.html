@@ -187,6 +187,8 @@ function pickTab(t) { tab = t; localStorage.setItem("ledger.tab", t); render(); 
 function dashboard(v) {
   const t = v.today || {};
   const sold = (v.menu || []).filter(m => m.soldToday > 0).sort((a, b) => b.soldToday - a.soldToday);
+  // Everything sold today, off-menu dishes included (older ledgers: the menu rows).
+  const soldAll = v.soldTodayAll ? v.soldTodayAll.filter(x => x.count > 0) : sold.map(m => ({ dish: m.dish, count: m.soldToday, onMenu: true }));
   const hist = (v.history || []).concat([{ day: t.day, revenue: t.revenue || 0, ingredients: t.ingredients || 0, wages: t.wages || 0, rent: t.rent || 0, byYou: t.byYou || 0, yourSpending: t.yourSpending || 0, wasted: t.wasted || 0, costOfSales: t.costOfSales || 0, tracked: true, profit: v.profitToday || 0, today: true }]);
   return `
   <div class="cards">
@@ -199,7 +201,7 @@ function dashboard(v) {
   </div>
   <div class="grid2">
     <div class="panel"><h3>Selling today · latest reviews</h3><div class="split">
-      <div>${sold.length ? pie(sold.map(m => [m.dish, m.soldToday])) : `<div class="dim">No sales yet today.</div>`}</div>
+      <div>${soldAll.length ? pie(soldAll.map(x => [x.onMenu ? x.dish : `${x.dish} (off menu)`, x.count])) : `<div class="dim">No sales yet today.</div>`}</div>
       <div>${(v.reviews || []).slice(0, 5).map(reviewLine).join("") || `<div class="dim">No reviews yet.</div>`}</div></div></div>
     <div class="panel"><h3>Running low</h3>${runningLow(v)}</div>
     <div class="panel"><h3>Sales as they happen</h3><div class="feed">${(v.sales || []).map(s => `<div><span>${esc(s.dish)}</span><span>${esc(s.time)}</span><span>${money(s.price)}</span></div>`).join("") || `<div class="dim">Sales appear here as they happen.</div>`}</div></div>

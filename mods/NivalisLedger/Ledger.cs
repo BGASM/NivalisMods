@@ -533,6 +533,8 @@ internal static class Ledger
             lastToday[key] = today;
             var soldToday = receipts.Where(r => r.Type == "Restaurant" && r.Dish != null)
                 .GroupBy(r => Key(r.Dish)).ToDictionary(g => g.Key, g => (count: g.Sum(r => r.Count), revenue: g.Sum(r => r.Amount)));
+            var soldNames = receipts.Where(r => r.Type == "Restaurant" && r.Dish != null)
+                .GroupBy(r => Key(r.Dish)).ToDictionary(g => g.Key, g => NameOf(g.First().Dish) ?? g.Key);
 
             var menuEntries = Venues.MenuOf(area);
             var costsNow = new Dictionary<string, int>();
@@ -663,13 +665,20 @@ internal static class Ledger
                 mealsServed = Venues.MealsServedOf(area),
                 sales = Feed(key).AsEnumerable().Reverse().Take(20).Select(x => new { dish = x.Dish, price = x.Price, time = x.Time }),
                 menu, ingredients, lowStock, platesLeft,
+                // Everything sold today, including dishes taken off the menu since (the menu rows only cover what's on it).
+                soldTodayAll = soldToday.OrderByDescending(kv => kv.Value.count).Select(kv => new
+                {
+                    dish = soldNames.TryGetValue(kv.Key, out var n) ? n : kv.Key, count = kv.Value.count, revenue = kv.Value.revenue,
+                    onMenu = menuEntries.Any(m => Key(m.Dish) == kv.Key),
+                }),
                 orders = active.Select(o => new { id = o.Id, dishes = o.Dishes.Select(NameOf).ToArray(), price = o.Price, prepared = o.Prepared, delivered = o.Delivered, done = false })
                     .Concat(done.Select(d => new { id = d.id, dishes = d.dishes, price = d.price, prepared = d.dishes.Length, delivered = d.dishes.Length, done = true })),
                 staff, wagesDueToday = staff.Sum(x => x.dueToday),
                 rating = recent.Count > 0 ? Math.Round(recent.Average(r => r.Score), 2) : (double?)null,
                 reviews = reviews.TakeLast(30).Reverse().Select(r => new   // newest first
                 {
-                    id = $"{r.GameSeconds}|{r.Reviewer}|{Items.NameOf(r.Dish)}", score = r.Score, dish = NameOf(r.Dish), reviewer = r.Reviewer, day = r.Day, time = $"{r.Hour:00}:00",
+                    id = $"{r.GameSeconds}|{r.Reviewer}|{Items.NameOf(r.Dish)}", score = r.Score, dish = NameOf(r.Dish), reviewer = r.Reviewer,
+                    day = GameDayOf(r.GameSeconds), time = $"{r.GameSeconds % 86400 / 3600:00}:{r.GameSeconds % 3600 / 60:00}",
                     service = Math.Round(r.ServiceQuality, 2), cleanliness = Math.Round(r.Cleanliness, 2),
                     comfort = Math.Round(r.Comfort, 2), allFoodDelivered = r.AllFoodDelivered, reaction = r.Reaction,
                 }),
@@ -860,6 +869,10 @@ internal static class Ledger
         var parts = roles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return string.Join(", ", parts.Select(r => JobNames.TryGetValue(r, out var n) ? n : r));
     }
+
+    // The game's day for a time in game seconds: days count from 1 and turn over at 08:00 (as on receipts). Worked out
+    // here so reviews read right with any kit (before kit 0.6.2, ReviewInfo.Day counted from 0 and turned at midnight).
+    static int GameDayOf(int gameSeconds) => (gameSeconds - 8 * 3600) / 86400 + 1;
 
     static string PersonName(Nivalis.GhostSystem.Ai.Person p)
     {
