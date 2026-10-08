@@ -656,7 +656,7 @@ internal static class Ledger
             var soldNames = receipts.Where(r => r.Type == "Restaurant" && r.Dish != null)
                 .GroupBy(r => Key(r.Dish)).ToDictionary(g => g.Key, g => NameOf(g.First().Dish) ?? g.Key);
 
-            var menuEntries = Venues.MenuOf(area);
+            var menuEntries = Venues.MenuOf(area).Select(MenuDish.Of).ToList();
             var costsNow = new Dictionary<string, int>();
             var menu = menuEntries.Select(m =>
             {
@@ -763,8 +763,15 @@ internal static class Ledger
                 };
             }).ToList();
 
-            var reviews = Venues.ReviewsOf(area).OrderBy(r => r.GameSeconds).ToList();   // oldest first, by time
-            var recent = reviews.TakeLast(50).ToList();
+            // Reviews, newest first (the game's order). The rating is the game's: the average of the 20 newest.
+            var reviewSet = ReviewsFor(area, key);
+            var reviews = reviewSet.List;
+            var recent = reviews.Take(50).ToList();
+            var last20 = reviews.Take(20).ToList();
+            bool showReviews = views.Any(x => x.Venue == key && x.Tab == "Reviews");
+            int reviewPageNo = views.Where(x => x.Venue == key && x.Tab == "Reviews").Select(x => x.ReviewPage).DefaultIfEmpty(0).Max();
+            int reviewPages = Math.Max(1, (reviews.Count + ReviewsPerPage - 1) / ReviewsPerPage);
+            reviewPageNo = Math.Min(reviewPageNo, reviewPages - 1);
             venues.Add(new
             {
                 key, name = book.Name, district = World.NameOf(Venues.DistrictOf(area)),
@@ -783,14 +790,16 @@ internal static class Ledger
                 }),
                 orders,   // null when not shown: the page keeps what it had
                 staff, wagesDueToday = staff.Sum(x => x.dueToday),
-                rating = recent.Count > 0 ? Math.Round(recent.Average(r => r.Score), 2) : (double?)null,
-                reviews = reviews.TakeLast(30).Reverse().Select(r => new   // newest first
+                rating = last20.Count > 0 ? Math.Round(last20.Average(r => r.Score), 2) : (double?)null,   // as the game shows it
+                ratingLast50 = recent.Count > 0 ? Math.Round(recent.Average(r => r.Score), 2) : (double?)null,
+                ratingLifetime = reviewSet.Lifetime, reviewCount = reviews.Count,
+                latestReviews = reviews.Take(5).Select(ReviewObj).ToList(),
+                // The Reviews tab's page (all reviews ever, a page at a time): only for a page on that tab.
+                reviewPage = showReviews ? new
                 {
-                    id = $"{r.GameSeconds}|{r.Reviewer}|{Items.NameOf(r.Dish)}", score = r.Score, dish = NameOf(r.Dish), reviewer = r.Reviewer,
-                    day = GameDayOf(r.GameSeconds), time = $"{r.GameSeconds % 86400 / 3600:00}:{r.GameSeconds % 3600 / 60:00}",
-                    service = Math.Round(r.ServiceQuality, 2), cleanliness = Math.Round(r.Cleanliness, 2),
-                    comfort = Math.Round(r.Comfort, 2), allFoodDelivered = r.AllFoodDelivered, reaction = r.Reaction,
-                }),
+                    page = reviewPageNo, pages = reviewPages, total = reviews.Count,
+                    items = reviews.Skip(reviewPageNo * ReviewsPerPage).Take(ReviewsPerPage).Select(ReviewObj).ToList(),
+                } : null,
                 satisfaction = recent.Count == 0 ? null : new
                 {
                     service = Math.Round(recent.Average(r => r.ServiceQuality), 2),
@@ -987,6 +996,67 @@ internal static class Ledger
         try { return area?.Venue?.Guid ?? Venues.NameOf(area) ?? "venue"; } catch { return "venue"; }
     }
 
+    // ---------- reviews ----------
+
+    const int ReviewsPerPage = 50;
+
+    // The game keeps every review (new ones at the front). Reading them all is one call per review, so they're kept
+    // per venue and read again only when the count changes (a new review).
+    sealed class ReviewSet { public int Count = -1; public List<ReviewInfo> List = new(); public double? Lifetime; }
+    static readonly Dictionary<string, ReviewSet> reviewCache = new();
+
+    static ReviewSet ReviewsFor(VenueAreaGhost area, string key)
+    {
+        int count = -1;
+        try { count = area._reviews?._backingList?.Count ?? -1; } catch { }
+        if (reviewCache.TryGetValue(key, out var set) && count >= 0 && set.Count == count) return set;
+        var list = Venues.ReviewsOf(area);   // the game's order: newest first
+        set = new ReviewSet
+        {
+            Count = count, List = list,
+            Lifetime = list.Count > 0 ? Math.Round(list.Average(r => r.Score), 2) : null,
+        };
+        reviewCache[key] = set;
+        return set;
+    }
+
+    static object ReviewObj(ReviewInfo r) => new
+    {
+        id = $"{r.GameSeconds}|{r.Reviewer}|{Items.NameOf(r.Dish)}", score = r.Score, dish = NameOf(r.Dish), reviewer = r.Reviewer,
+        day = GameDayOf(r.GameSeconds), time = $"{r.GameSeconds % 86400 / 3600:00}:{r.GameSeconds % 3600 / 60:00}",
+        service = Math.Round(r.ServiceQuality, 2), cleanliness = Math.Round(r.Cleanliness, 2),
+        comfort = Math.Round(r.Comfort, 2), allFoodDelivered = r.AllFoodDelivered, reaction = r.Reaction,
+    };
+
+    // A menu dish with the ingredients the kitchen actually uses. Customizing a recipe (another meat, another way of
+    // cooking it) puts a new recipe in the game's recipe table, which the kitchen cooks from; the menu entry keeps the
+    // recipe it was added with, and that is what Venues.MenuOf (kit 0.6.1) reads. So: the table's current recipe.
+    sealed class MenuDish
+    {
+        public ItemType Dish;
+        public int Price;
+        public List<(ItemType Item, int Amount)> Ingredients;
+
+        internal static MenuDish Of(MenuEntry m)
+        {
+            var d = new MenuDish { Dish = m.Dish, Price = m.Price, Ingredients = m.Ingredients.ToList() };
+            try
+            {
+                var db = Nivalis.CraftingSystem.MealDatabase.Instance;
+                var inputs = m.Dish != null ? db?.GetMealRecipeFromItemType(m.Dish)?.Inputs : null;
+                if (inputs != null && inputs.Length > 0)
+                {
+                    var list = new List<(ItemType Item, int Amount)>();
+                    foreach (var input in inputs)
+                        if (input.DefaultItem != null) list.Add((input.DefaultItem, Math.Max(1, input.Amount)));
+                    if (list.Count > 0) d.Ingredients = list;
+                }
+            }
+            catch { }
+            return d;
+        }
+    }
+
     // Item names come from the game each time (a native call and a new string), and the snapshot asks for the same
     // few hundred over and over: kept per item (items are assets, so they last the session).
     static readonly Dictionary<IntPtr, (string key, string name, int market)> names = new();
@@ -1058,7 +1128,7 @@ internal static class Ledger
         pocketWasted = saved?.PocketWasted ?? new();
         grown = saved?.Grown ?? new();
         nextBatchId = Math.Max(1, saved?.NextBatchId ?? 1);
-        feed.Clear(); openOrders.Clear(); doneOrders.Clear(); lastToday.Clear(); pastCache.Clear(); names.Clear(); rowsCache.Clear();
+        feed.Clear(); openOrders.Clear(); doneOrders.Clear(); lastToday.Clear(); pastCache.Clear(); names.Clear(); rowsCache.Clear(); reviewCache.Clear();
         snapshotAt = 0f;
     }
 

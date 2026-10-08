@@ -11,7 +11,7 @@ namespace NivalisLedger;
 // Nivalis Ledger: a live profitability tracker for the player's venues, as a web page on this machine
 // (http://localhost:5720 by default): sales, plate costs and margins, ingredient stock and its value, pending orders,
 // staff pay, reviews. The game side is Ledger (bookkeeping) and Server (the page).
-[BepInPlugin(Guid, "Nivalis Ledger", "0.1.3")]
+[BepInPlugin(Guid, "Nivalis Ledger", "0.1.4")]
 [BepInDependency(ModKit.Guid, ">=0.6.1")]   // Venues.MenuOf / StockOf / OrdersOf / StaffOf (with mod jobs, 0.6.1) / ReviewsOf / ReceiptsOf
 public class Plugin : BasePlugin
 {

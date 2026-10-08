@@ -105,6 +105,7 @@ internal static class Server
     {
         public string Tab = "Dashboard", Venue;
         public HashSet<string> Open = new();
+        public int ReviewPage;   // 0 = newest
     }
     static readonly System.Collections.Concurrent.ConcurrentDictionary<string, View> views = new();
     internal static List<View> Views() => views.Values.ToList();
@@ -131,6 +132,7 @@ internal static class Server
             {
                 Tab = j.TryGetProperty("tab", out var t) ? t.GetString() : "Dashboard",
                 Venue = j.TryGetProperty("venue", out var ve) ? ve.GetString() : null,
+                ReviewPage = j.TryGetProperty("reviewPage", out var rp) && rp.ValueKind == JsonValueKind.Number ? Math.Max(0, rp.GetInt32()) : 0,
             };
             if (j.TryGetProperty("open", out var o) && o.ValueKind == JsonValueKind.Array)
                 foreach (var k in o.EnumerateArray()) if (k.ValueKind == JsonValueKind.String) v.Open.Add(k.GetString());

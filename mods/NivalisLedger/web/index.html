@@ -133,12 +133,14 @@ function toast(text) {
 
 // This page, to the ledger: which venue, tab and expanded rows it shows (so only those are built).
 const CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
+let reviewPage = 0;   // Reviews tab: 0 = newest
 function sendView() {
-  post("/api/view", { client: CLIENT, tab, venue: venueKey, open: [...open] }).catch(() => { });
+  post("/api/view", { client: CLIENT, tab, venue: venueKey, open: [...open], reviewPage }).catch(() => { });
 }
+function pickReviewPage(n) { reviewPage = Math.max(0, n); render(); sendView(); }
 
 // Sections sent only while shown: an update without one keeps what the page already has.
-const SECTIONS = ["ingredients", "orders"];
+const SECTIONS = ["ingredients", "orders", "reviewPage"];
 function merge(next) {
   if (state) {
     if (next.inventory == null && state.inventory != null) next.inventory = state.inventory;
@@ -178,7 +180,7 @@ function render() {
     $("#view").innerHTML = ({ Dashboard: dashboard, Menu: menu, Ingredients: ingredients, Orders: orders, Staff: staff, Reviews: reviews })[tab](v);
   }
   for (const [id, text] of Object.entries(drafts)) { const el = document.getElementById(id); if (el) el.value = text; }
-  for (const x of venues) for (const r of x.reviews || []) seenReviews.add(r.id);
+  for (const x of venues) for (const r of (x.latestReviews || []).concat(x.reviewPage ? x.reviewPage.items : [])) seenReviews.add(r.id);
   reviewsPrimed = true;
 }
 document.addEventListener("mousemove", e => {
@@ -221,7 +223,7 @@ function dashboard(v) {
   <div class="grid2">
     <div class="panel"><h3>Selling today · latest reviews</h3><div class="split">
       <div>${soldAll.length ? pie(soldAll.map(x => [x.onMenu ? x.dish : `${x.dish} (off menu)`, x.count])) : `<div class="dim">No sales yet today.</div>`}</div>
-      <div>${(v.reviews || []).slice(0, 5).map(reviewLine).join("") || `<div class="dim">No reviews yet.</div>`}</div></div></div>
+      <div>${(v.latestReviews || []).map(reviewLine).join("") || `<div class="dim">No reviews yet.</div>`}</div></div></div>
     <div class="panel"><h3>Running low</h3>${runningLow(v)}</div>
     <div class="panel"><h3>Sales as they happen</h3><div class="feed">${(v.sales || []).map(s => `<div><span>${esc(s.dish)}</span><span>${esc(s.time)}</span><span>${money(s.price)}</span></div>`).join("") || `<div class="dim">Sales appear here as they happen.</div>`}</div></div>
     <div class="panel"><h3>Today: income against costs</h3>${todayBars(t, v.profitToday)}</div>
@@ -314,10 +316,16 @@ function staff(v) {
 function reviews(v) {
   const s = v.satisfaction;
   const pop = Object.entries(v.popularity || {}).sort((a, b) => b[1] - a[1]);
-  return `<div class="cards">${card("Rating (last 50)", v.rating != null ? `<span class="stars">${stars(v.rating)}</span> <small class="dim">${v.rating}</small>` : "–")}
+  const rp = v.reviewPage;
+  const pager = rp && rp.pages > 1 ? `<div style="display:flex;gap:8px;align-items:center;margin:8px 0">
+      <button class="small" ${rp.page <= 0 ? "disabled" : ""} onclick="pickReviewPage(${rp.page - 1})">Newer</button>
+      <span class="dim">page ${rp.page + 1} of ${rp.pages} · ${rp.total} reviews</span>
+      <button class="small" ${rp.page >= rp.pages - 1 ? "disabled" : ""} onclick="pickReviewPage(${rp.page + 1})">Older</button></div>` : "";
+  const rate = (label, r, note) => card(label, r != null ? `<span class="stars">${stars(r)}</span> <small class="dim">${r}</small>${note ? `<div class="dim" style="font-size:11px">${note}</div>` : ""}` : "–");
+  return `<div class="cards">${rate("Rating", v.rating, "last 20, as in game")}${rate("Last 50", v.ratingLast50)}${rate("Lifetime", v.ratingLifetime, `${v.reviewCount ?? 0} reviews`)}
     ${s ? card("Service", s.service) + card("Cleanliness", s.cleanliness) + card("Comfort", s.comfort) + card("Food all delivered", s.delivered + "%") : ""}</div>
   <div class="grid2">
-    <div class="panel"><h3>Reviews</h3>${(v.reviews || []).map(reviewLine).join("") || `<div class="dim">No reviews yet.</div>`}</div>
+    <div class="panel"><h3>Reviews</h3>${pager}${rp ? rp.items.map(reviewLine).join("") || `<div class="dim">No reviews yet.</div>` : `<div class="dim">Loading…</div>`}${pager}</div>
     <div class="panel"><h3>Popularity by customer group</h3>${pop.map(([k, n]) => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)"><span>${esc(k)}</span><span>${Number(n).toFixed(2)}</span></div>`).join("") || `<div class="dim">No data.</div>`}</div>
   </div>`;
 }
