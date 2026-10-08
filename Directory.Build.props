@@ -5,8 +5,11 @@
     <LangVersion>latest</LangVersion>
     <GameDir Condition="'$(GameDir)' == ''">H:\SteamLibrary\steamapps\common\Nivalis Nights</GameDir>
     <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
-    <!-- Thunderstore dependency on the kit for mods that need it (the current kit release). -->
-    <KitDependency>BGASM-NivalisModKit-0.6.0</KitDependency>
+    <!-- Thunderstore-style dependency on the kit, written into each zip's manifest.json. Empty: the mods aren't on
+         Thunderstore, and mod managers that read the manifest look for BGASM-NivalisModKit there and report it
+         missing even with the kit installed. Each mod's [BepInDependency] still checks the kit version in game.
+         To publish on Thunderstore, set it to BGASM-NivalisModKit-<version> (upload the kit first). -->
+    <KitDependency></KitDependency>
   </PropertyGroup>
 
   <ItemGroup>

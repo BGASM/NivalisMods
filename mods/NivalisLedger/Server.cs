@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -71,6 +73,9 @@ internal static class Server
                 stream.ReadTimeout = 10000;
                 var (method, path, headers, body) = Read(stream);
                 if (method == null) return;
+                string query = null;
+                int q = path.IndexOf('?');
+                if (q >= 0) { query = path[(q + 1)..]; path = path[..q]; }
                 headers.TryGetValue("host", out var host);
                 if (host == null || !(host.StartsWith("localhost:") || host.StartsWith("127.0.0.1:")))
                 {
@@ -79,11 +84,11 @@ internal static class Server
                 }
                 if (method == "GET" && (path == "/" || path == "/index.html")) Send(stream, 200, "text/html; charset=utf-8", page);
                 else if (method == "GET" && path == "/api/state") Send(stream, 200, "application/json", Ledger.Snapshot);
-                else if (method == "GET" && path == "/api/stream") Stream(stream);
+                else if (method == "GET" && path == "/api/stream") Stream(stream, QueryValue(query, "client"));
                 else if (method == "POST")
                 {
                     if (!headers.TryGetValue("x-ledger-token", out var t) || t != token) { Send(stream, 403, "text/plain", "bad token"); return; }
-                    Send(stream, 200, "application/json", Change(path, body));
+                    Send(stream, 200, "application/json", path == "/api/view" ? SetView(body) : Change(path, body));
                 }
                 else Send(stream, 404, "text/plain", "not found");
             }
@@ -91,11 +96,69 @@ internal static class Server
         catch { /* a closed tab mid-request */ }
     }
 
+    // Open pages: the ledger builds the page's data only while one is connected (the page keeps a stream open), and
+    // the heavier tables only for what a page shows (its venue, tab and expanded rows, sent by the page).
+    static int streams;
+    internal static bool Viewing => Volatile.Read(ref streams) > 0;
+
+    internal sealed class View
+    {
+        public string Tab = "Dashboard", Venue;
+        public HashSet<string> Open = new();
+    }
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, View> views = new();
+    internal static List<View> Views() => views.Values.ToList();
+
+    static string QueryValue(string query, string name)
+    {
+        foreach (var part in (query ?? "").Split('&'))
+        {
+            int eq = part.IndexOf('=');
+            if (eq > 0 && part[..eq] == name) return Uri.UnescapeDataString(part[(eq + 1)..]);
+        }
+        return null;
+    }
+
+    // The page says what it shows: { client, tab, venue, open: [row keys] }.
+    static string SetView(string body)
+    {
+        try
+        {
+            var j = JsonDocument.Parse(body).RootElement;
+            string client = j.TryGetProperty("client", out var c) ? c.GetString() : null;
+            if (string.IsNullOrEmpty(client)) return "{\"error\":\"no client\"}";
+            var v = new View
+            {
+                Tab = j.TryGetProperty("tab", out var t) ? t.GetString() : "Dashboard",
+                Venue = j.TryGetProperty("venue", out var ve) ? ve.GetString() : null,
+            };
+            if (j.TryGetProperty("open", out var o) && o.ValueKind == JsonValueKind.Array)
+                foreach (var k in o.EnumerateArray()) if (k.ValueKind == JsonValueKind.String) v.Open.Add(k.GetString());
+            views[client] = v;
+            Ledger.WakeUp();
+            return "{\"ok\":true}";
+        }
+        catch { return "{\"error\":\"bad json\"}"; }
+    }
+
     // Each snapshot as it changes; a comment every 15 s keeps the connection open.
-    static void Stream(NetworkStream stream)
+    static void Stream(NetworkStream stream, string client)
     {
         var head = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n");
         stream.Write(head);
+        Interlocked.Increment(ref streams);
+        if (!string.IsNullOrEmpty(client)) views.TryAdd(client, new View());
+        Ledger.WakeUp();   // build fresh data now, not at the idle pace
+        try { StreamLoop(stream); }
+        finally
+        {
+            Interlocked.Decrement(ref streams);
+            if (!string.IsNullOrEmpty(client)) views.TryRemove(client, out _);
+        }
+    }
+
+    static void StreamLoop(NetworkStream stream)
+    {
         int sent = -1;
         var quiet = DateTime.UtcNow;
         while (true)

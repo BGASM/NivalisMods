@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>NivalisLedger</AssemblyName>
-    <Version>0.1.2</Version>
+    <Version>0.1.3</Version>
     <TsName>NivalisLedger</TsName>
     <TsDescription>A live profit tracker for your venues in your browser: sales, plate costs and margins, ingredient stock and its value, pending orders, staff pay and reviews.</TsDescription>
-    <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
-    <TsDependencies>BGASM-NivalisModKit-0.6.1</TsDependencies>
+    <TsWebsite>https://www.nexusmods.com/nivalisnights/mods/86</TsWebsite>
+    <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>
   <ItemGroup>
     <!-- The kit as an outside modder references it: the installed DLL. Build and install the kit first. -->

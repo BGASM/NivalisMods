@@ -131,12 +131,31 @@ function toast(text) {
   clearTimeout(toast.timer); toast.timer = setTimeout(() => t.style.display = "none", 5000);
 }
 
+// This page, to the ledger: which venue, tab and expanded rows it shows (so only those are built).
+const CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
+function sendView() {
+  post("/api/view", { client: CLIENT, tab, venue: venueKey, open: [...open] }).catch(() => { });
+}
+
+// Sections sent only while shown: an update without one keeps what the page already has.
+const SECTIONS = ["ingredients", "orders"];
+function merge(next) {
+  if (state) {
+    if (next.inventory == null && state.inventory != null) next.inventory = state.inventory;
+    for (const v of next.venues || []) {
+      const old = (state.venues || []).find(x => x.key === v.key);
+      if (old) for (const s of SECTIONS) if (v[s] == null && old[s] != null) v[s] = old[s];
+    }
+  }
+  return next;
+}
+
 function connect() {
-  const es = new EventSource("/api/stream");
+  const es = new EventSource("/api/stream?client=" + CLIENT);
   let dropped = false;   // the stream reconnecting may mean the game restarted, with a new token
-  es.onopen = () => { if (dropped) return reloadForToken(); $("#live").innerHTML = `<b>●</b> live`; };
+  es.onopen = () => { if (dropped) return reloadForToken(); $("#live").innerHTML = `<b>●</b> live`; sendView(); };
   es.onerror = () => { dropped = true; $("#live").innerHTML = `<b class="off">●</b> reconnecting (is the game running?)`; };
-  es.onmessage = e => { state = JSON.parse(e.data); render(); };
+  es.onmessage = e => { state = merge(JSON.parse(e.data)); render(); };
 }
 
 function render() {
@@ -151,7 +170,7 @@ function render() {
   if (venueKey !== "pocket" && !venues.some(v => v.key === venueKey)) venueKey = venues[0].key;
   const inv = state.inventory || [];
   $("#venues").innerHTML = venues.map(v => `<button class="${v.key === venueKey ? "on" : ""}" onclick="pickVenue('${v.key}')">${esc(v.name)}<small>${esc(v.district || "")} · ${money(v.profitToday)} today</small></button>`).join("")
-    + `<button class="${venueKey === "pocket" ? "on" : ""}" onclick="pickVenue('pocket')" style="margin-top:10px;border-top:1px solid var(--line)">Your inventory<small>${inv.length} items · ${money(inv.reduce((a, i) => a + i.stockValue, 0))}</small></button>`;
+    + `<button class="${venueKey === "pocket" ? "on" : ""}" onclick="pickVenue('pocket')" style="margin-top:10px;border-top:1px solid var(--line)">Your inventory<small>${state.inventoryCount ?? inv.length} items · ${money(state.inventoryValue ?? inv.reduce((a, i) => a + i.stockValue, 0))}</small></button>`;
   if (venueKey === "pocket") { $("#tabs").innerHTML = ""; $("#view").innerHTML = inventory(inv); }
   else {
     $("#tabs").innerHTML = TABS.map(t => `<button class="${t === tab ? "on" : ""}" onclick="pickTab('${t}')">${t}</button>`).join("");
@@ -179,8 +198,8 @@ document.addEventListener("pointerup", () => setTimeout(() => { pressing = false
 document.addEventListener("pointercancel", () => { pressing = false; if (pending) render(); }, true);
 document.addEventListener("input", e => { if (e.target.id) drafts[e.target.id] = e.target.value; });
 
-function pickVenue(k) { venueKey = k; localStorage.setItem("ledger.venue", k); render(); }
-function pickTab(t) { tab = t; localStorage.setItem("ledger.tab", t); render(); }
+function pickVenue(k) { venueKey = k; localStorage.setItem("ledger.venue", k); render(); sendView(); }
+function pickTab(t) { tab = t; localStorage.setItem("ledger.tab", t); render(); sendView(); }
 
 // ---------- tabs ----------
 
@@ -243,7 +262,8 @@ function ingredients(v) {
 
 function batchList(i, where) {
   const label = { delivery: "delivered (manager)", bought: "bought by you", grown: "grown", estimated: "estimated at market", opening: "opening stock (estimated)", "from you": "carried in by you" };
-  return (i.batches || []).map(b => {
+  if (i.batches == null) return i.batchCount ? `<span class="dim">Loading ${i.batchCount} batch${i.batchCount === 1 ? "" : "es"}…</span>` : `<span class="dim">No batches yet.</span>`;
+  return i.batches.map(b => {
     const id = `b-${b.id}`;
     return `<div style="margin:4px 0">+${b.count} · ${esc(label[b.source] || b.source)} · ${esc(b.time)} · @ ${money(b.unit)}${b.edited ? ` <span class="tag">set by you</span>` : ""}
       <input class="money" id="${id}" placeholder="new price" onkeydown="if(event.key==='Enter')setBatch('${esc(i.key)}',${b.id},'${id}','${where}')"> <button class="small" onclick="setBatch('${esc(i.key)}',${b.id},'${id}','${where}')">Set</button></div>`;
@@ -412,7 +432,7 @@ function pie(items) {
     <div class="legend">${items.map(([name, n], k) => `<div><i style="background:${COLORS[k % COLORS.length]}"></i>${esc(name)} <span class="dim">${n} (${Math.round(n / total * 100)}%)</span></div>`).join("")}</div></div>`;
 }
 
-function toggle(key) { open.has(key) ? open.delete(key) : open.add(key); render(); }
+function toggle(key) { open.has(key) ? open.delete(key) : open.add(key); render(); sendView(); }
 
 // ---------- changes ----------
 

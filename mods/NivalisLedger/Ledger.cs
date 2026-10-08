@@ -297,10 +297,30 @@ internal static class Ledger
             catch (Exception e) { Plugin.L.LogWarning($"Ledger: {e.Message}"); }
         }
         if (!GameEvents.IsInGame || Time.unscaledTime < snapshotAt) return;
-        snapshotAt = Time.unscaledTime + 1f;
-        try { Snapshot = BuildSnapshot(); Version++; }
+        // Bookkeeping (stock moves, plate costs, today's totals) keeps going; the page's data is built only while a page
+        // is open. Slower when nobody's watching, slower again while the game is paused (little changes then).
+        bool viewing = Server.Viewing, paused = Time.timeScale <= 0f;
+        snapshotAt = Time.unscaledTime + (viewing ? (paused ? 2f : 1f) : (paused ? 5f : 3f));
+        try
+        {
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var built = BuildSnapshot(viewing);
+            if (built != null) { Snapshot = built; Version++; }
+            double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            // A pass long enough to show as a hitch: say so (once a minute at most), for stutter reports.
+            if (ms > 8.0 && Time.unscaledTime >= slowLoggedAt)
+            {
+                slowLoggedAt = Time.unscaledTime + 60f;
+                Plugin.L.LogWarning($"Ledger: an update took {ms:0} ms ({(viewing ? "page open" : "page closed")}, {Venues.PlayerOwned.Count} venue(s))");
+            }
+        }
         catch (Exception e) { Plugin.L.LogWarning($"Ledger: snapshot failed: {e}"); }
     }
+
+    static float slowLoggedAt;
+
+    // A page just connected: build its data on the next frame.
+    internal static void WakeUp() => snapshotAt = 0f;
 
     // Changes from the web page run on the main thread.
     internal static void Post(Action action) => fromServer.Enqueue(action);
@@ -498,19 +518,121 @@ internal static class Ledger
         return (Market(item), "market");
     }
 
-    static int Market(ItemType item)
+    // The item's base price (what vendors start from), from the per-item cache.
+    static int Market(ItemType item) => Names(item).market;
+
+    // ---------- the Ingredients and inventory tables ----------
+
+    // Rows change only when stock moves, something is bought, delivered or spoils, or a price is set: each table's rows
+    // are kept (as JSON) with a fingerprint of what they're built from, and rebuilt only when that changes.
+    sealed class Rows { public int Sig; public JsonElement Json; }
+    static readonly Dictionary<string, Rows> rowsCache = new();
+
+    static int Mix(int h, int v) => unchecked(h * 31 + v);
+
+    static int LineSig(int h, StockLine line)
     {
-        try { return item == null ? 0 : (int)Math.Round(item.basePrice * 100f); } catch { return 0; }
+        if (line == null) return Mix(h, -1);
+        h = Mix(Mix(Mix(h, line.Qty), (int)line.Value), line.LastAverage);
+        foreach (var b in line.Batches) h = Mix(Mix(Mix(Mix(h, b.Id), b.Count), b.Unit), b.Edited ? 1 : 0);
+        foreach (var t in line.InTransit) h = Mix(Mix(h, t.Count), t.Unit);
+        return h;
+    }
+
+    static JsonElement Cached(string cacheKey, int sig, Func<object> build)
+    {
+        if (rowsCache.TryGetValue(cacheKey, out var r) && r.Sig == sig) return r.Json;
+        rowsCache[cacheKey] = r = new Rows { Sig = sig, Json = JsonSerializer.SerializeToElement(build(), json) };
+        return r.Json;
+    }
+
+    static object Batches(StockLine line) =>
+        line?.Batches.AsEnumerable().Reverse().Select(x => new { x.Id, x.Count, x.Unit, x.Source, x.Time, x.Edited }).ToList();
+
+    static JsonElement IngredientRows(string venue, Book book, Dictionary<string, (ItemType item, int count)> stock,
+        List<ItemType> menuItems, HashSet<string> open)
+    {
+        var onMenu = new HashSet<string>(menuItems.Select(Key));
+        var items = new Dictionary<string, ItemType>();
+        foreach (var i in menuItems) items.TryAdd(Key(i), i);
+        foreach (var kv in stock) items[kv.Key] = kv.Value.item;
+        var keys = new HashSet<string>(items.Keys);
+        keys.UnionWith(book.Bought.Keys);
+        keys.UnionWith(book.Stock.Where(kv => kv.Value.Qty > 0 || kv.Value.InTransit.Count > 0).Select(kv => kv.Key));
+
+        // The fingerprint: everything a row shows.
+        int sig = 17;
+        foreach (var k in keys.OrderBy(k => k, StringComparer.Ordinal))
+        {
+            book.Stock.TryGetValue(k, out var line);
+            book.Bought.TryGetValue(k, out var p);
+            book.WastedToday.TryGetValue(k, out var w);
+            sig = Mix(sig, k.GetHashCode());
+            sig = Mix(sig, stock.TryGetValue(k, out var s) ? s.count : -1);
+            sig = LineSig(sig, line);
+            sig = Mix(Mix(Mix(sig, p?.QtyToday ?? 0), p?.SpendToday ?? 0), p?.DeliveredToday ?? 0);
+            sig = Mix(Mix(sig, w?.Qty ?? 0), (int)(w?.Value ?? 0));
+            sig = Mix(sig, costOverrides.TryGetValue(k, out var o) ? o : -1);
+            sig = Mix(Mix(sig, onMenu.Contains(k) ? 1 : 0), open.Contains(k) ? 1 : 0);
+        }
+
+        return Cached("venue:" + venue, sig, () => keys.Select(k =>
+        {
+            book.Stock.TryGetValue(k, out var line);
+            book.Bought.TryGetValue(k, out var p);
+            book.WastedToday.TryGetValue(k, out var w);
+            items.TryGetValue(k, out var item);
+            var (unit, source) = item != null ? UnitCost(book, item) : (line?.Average ?? 0, "average");
+            return new
+            {
+                key = k, name = line?.Name ?? p?.Name ?? NameOf(item) ?? k,
+                stock = stock.TryGetValue(k, out var s) ? s.count : 0,
+                inTransit = line?.InTransit.Sum(l => l.Count) ?? 0,
+                onMenu = onMenu.Contains(k),
+                boughtToday = p?.QtyToday ?? 0, spendToday = p?.SpendToday ?? 0, deliveredToday = p?.DeliveredToday ?? 0,
+                wastedToday = w?.Qty ?? 0, wastedValue = w?.Value ?? 0,
+                average = line?.Average, stockValue = line?.Value ?? 0, market = Market(item),
+                overrideUnit = costOverrides.TryGetValue(k, out var o) ? o : (int?)null,
+                unitCost = unit, costSource = source,
+                batchCount = line?.Batches.Count ?? 0,
+                batches = open.Contains(k) ? Batches(line) : null,   // only for expanded rows
+            };
+        }).OrderBy(i => i.name).ToList());
+    }
+
+    static JsonElement PocketRows(Dictionary<string, (ItemType item, int count)> carried, HashSet<string> open)
+    {
+        var lines = pocket.Where(kv => kv.Value.Qty > 0).OrderBy(kv => kv.Key, StringComparer.Ordinal).ToList();
+        int sig = 23;
+        foreach (var kv in lines)
+        {
+            sig = LineSig(Mix(sig, kv.Key.GetHashCode()), kv.Value);
+            sig = Mix(sig, pocketWasted.TryGetValue(kv.Key, out var w) ? w.Qty : 0);
+            sig = Mix(sig, open.Contains(kv.Key) ? 1 : 0);
+        }
+        return Cached("pocket", sig, () => lines.Select(kv => new
+        {
+            key = kv.Key, name = kv.Value.Name ?? kv.Key, stock = kv.Value.Qty, average = kv.Value.Average,
+            stockValue = kv.Value.Value,
+            wastedToday = pocketWasted.TryGetValue(kv.Key, out var pw) ? pw.Qty : 0,
+            market = carried.TryGetValue(kv.Key, out var c) ? Market(c.item) : 0,
+            estimated = kv.Value.Batches.Any(x => x.Source is "estimated" or "opening" && !x.Edited),
+            batchCount = kv.Value.Batches.Count,
+            batches = open.Contains(kv.Key) ? Batches(kv.Value) : null,
+        }).OrderBy(x => x.name).ToList());
     }
 
     // ---------- the snapshot ----------
 
-    static string BuildSnapshot()
+    // Bookkeeping every time; the page's data (returned as JSON) only when view is true, else null.
+    static string BuildSnapshot(bool view)
     {
         var venues = new List<object>();
         var owned = Venues.PlayerOwned;
         // The player's own receipts count against their venue when they have just one (else they're shown on their own).
-        playerReceipts = owned.Count == 1 ? Economy.PlayerReceipts() : new List<ReceiptInfo>();
+        // Only today's here; all of them only when the past days are rebuilt (History).
+        var mineToday = owned.Count == 1 ? Economy.PlayerReceipts(GameTime.Day) : new List<ReceiptInfo>();
+        var views = view ? Server.Views() : new List<Server.View>();
         var stocks = owned.Select(a => (book: BookOf(a), name: Venues.DisplayNameOf(a) ?? "venue", stock: ByKey(Venues.StockOf(a)))).ToList();
         var carried = ByKey(Economy.PlayerStock());
         Reconcile(stocks, carried);
@@ -524,10 +646,8 @@ internal static class Ledger
             SampleStock(key, stock);
 
             // Today, from the receipts (the venue's, and the player's own when they have one venue).
-            var allReceipts = Venues.ReceiptsOf(area);
-            var receipts = allReceipts.Where(r => r.Day == GameTime.Day).ToList();
-            var mine = playerReceipts.Where(r => r.Day == GameTime.Day).ToList();
-            var today = Day(GameTime.Day, receipts, mine, key);
+            var receipts = Venues.ReceiptsOf(area, GameTime.Day);
+            var today = Day(GameTime.Day, receipts, mineToday, key);
             today.ByYou = book.ByYouToday;
             today.Wasted = (int)book.WastedToday.Values.Sum(w => w.Value);
             lastToday[key] = today;
@@ -573,35 +693,15 @@ internal static class Ledger
             }
             today.CostOfSales = cogs;
             today.Tracked = true;
+            if (!view) continue;   // the rest is only for the page
+            // The heavier tables only for a page showing this venue on that tab; batches only for expanded rows.
+            bool showIngredients = views.Any(x => x.Venue == key && x.Tab == "Ingredients");
+            bool showOrders = views.Any(x => x.Venue == key && x.Tab == "Orders");
+            var openRows = new HashSet<string>(views.Where(x => x.Venue == key).SelectMany(x => x.Open));
 
-            // Ingredients: in stock, bought, or on the menu.
+            // Ingredients: in stock, bought, or on the menu (built only for a page on the Ingredients tab).
             var menuItems = menuEntries.SelectMany(m => m.Ingredients.Select(i => i.Item)).Where(i => i != null).ToList();
-            var items = menuItems.GroupBy(Key).ToDictionary(g => g.Key, g => g.First());
-            foreach (var kv in stock) items[kv.Key] = kv.Value.item;
-            var keys = new HashSet<string>(items.Keys);
-            keys.UnionWith(book.Bought.Keys);
-            keys.UnionWith(book.Stock.Where(kv => kv.Value.Qty > 0 || kv.Value.InTransit.Count > 0).Select(kv => kv.Key));
-            var ingredients = keys.Select(k =>
-            {
-                book.Stock.TryGetValue(k, out var line);
-                book.Bought.TryGetValue(k, out var p);
-                items.TryGetValue(k, out var item);
-                var (unit, source) = item != null ? UnitCost(book, item) : (line?.Average ?? 0, "average");
-                return new
-                {
-                    key = k, name = line?.Name ?? p?.Name ?? NameOf(item) ?? k,
-                    stock = stock.TryGetValue(k, out var s) ? s.count : 0,
-                    inTransit = line?.InTransit.Sum(l => l.Count) ?? 0,
-                    onMenu = menuItems.Any(i => Key(i) == k),
-                    boughtToday = p?.QtyToday ?? 0, spendToday = p?.SpendToday ?? 0, deliveredToday = p?.DeliveredToday ?? 0,
-                    wastedToday = book.WastedToday.TryGetValue(k, out var wq) ? wq.Qty : 0,
-                    wastedValue = book.WastedToday.TryGetValue(k, out var wv) ? wv.Value : 0,
-                    average = line?.Average, stockValue = line?.Value ?? 0, market = Market(item),
-                    overrideUnit = costOverrides.TryGetValue(k, out var o) ? o : (int?)null,
-                    unitCost = unit, costSource = source,
-                    batches = line?.Batches.AsEnumerable().Reverse().Select(x => new { x.Id, x.Count, x.Unit, x.Source, x.Time, x.Edited }),
-                };
-            }).OrderBy(i => i.name).ToList();
+            object ingredients = showIngredients ? IngredientRows(key, book, stock, menuItems, openRows) : null;
 
             // Running low: menu ingredients, lowest first, with today's levels; and how many more of each dish the stock
             // allows (the scarcest ingredient decides).
@@ -629,18 +729,28 @@ internal static class Ledger
                 return new { dish = NameOf(m.Dish), plates = limit.plates, limitedBy = limit.name };
             }).OrderBy(d => d.plates).ToList();
 
-            // Orders: active ones, and ones that just completed (green on the page for a few seconds).
-            var active = Venues.OrdersOf(area);
-            if (!openOrders.TryGetValue(key, out var open)) openOrders[key] = open = new();
-            if (!doneOrders.TryGetValue(key, out var done)) doneOrders[key] = done = new();
-            var ids = new HashSet<string>(active.Select(o => o.Id));
-            foreach (var gone in open.Keys.Where(id => !ids.Contains(id)).ToList())
+            // Orders: active ones, and ones that just completed (green on the page for a few seconds). Only for a page on
+            // the Orders tab; tracking starts over when one comes back, so orders finished meanwhile don't all flash.
+            object orders = null;
+            if (showOrders)
             {
-                done.Add((gone, open[gone].dishes, open[gone].price, Time.unscaledTime));
-                open.Remove(gone);
+                var active = Venues.OrdersOf(area);
+                bool fresh = !openOrders.ContainsKey(key);
+                if (!openOrders.TryGetValue(key, out var open)) openOrders[key] = open = new();
+                if (!doneOrders.TryGetValue(key, out var done)) doneOrders[key] = done = new();
+                var ids = new HashSet<string>(active.Select(o => o.Id));
+                foreach (var gone in open.Keys.Where(id => !ids.Contains(id)).ToList())
+                {
+                    if (!fresh) done.Add((gone, open[gone].dishes, open[gone].price, Time.unscaledTime));
+                    open.Remove(gone);
+                }
+                foreach (var o in active) open[o.Id] = (o.Dishes.Select(NameOf).ToArray(), o.Price);
+                done.RemoveAll(d => Time.unscaledTime - d.at > 4f);
+                orders = active.Select(o => new { id = o.Id, dishes = o.Dishes.Select(NameOf).ToArray(), price = o.Price, prepared = o.Prepared, delivered = o.Delivered, done = false })
+                    .Concat(done.Select(d => new { id = d.id, dishes = d.dishes, price = d.price, prepared = d.dishes.Length, delivered = d.dishes.Length, done = true }))
+                    .ToList();
             }
-            foreach (var o in active) open[o.Id] = (o.Dishes.Select(NameOf).ToArray(), o.Price);
-            done.RemoveAll(d => Time.unscaledTime - d.at > 4f);
+            else { openOrders.Remove(key); doneOrders.Remove(key); }
 
             var staff = Venues.StaffOf(area).Select(s =>
             {
@@ -659,9 +769,9 @@ internal static class Ledger
             {
                 key, name = book.Name, district = World.NameOf(Venues.DistrictOf(area)),
                 today, profitToday = today.Profit,
-                history = PastDays(book, allReceipts, key).TakeLast(30).Select(d => new { d.Day, d.Revenue, d.Ingredients, d.Wages, d.Rent, d.ByYou, d.YourSpending, d.Wasted, d.CostOfSales, d.Tracked, profit = d.Profit, d.Sales }),
+                history = History(area, book, key).days,
                 stockOnHand = book.Stock.Values.Sum(l => l.Value),
-                receiptSummary = ReceiptSummary(allReceipts, playerReceipts),
+                receiptSummary = WithToday(History(area, book, key), receipts, mineToday),
                 mealsServed = Venues.MealsServedOf(area),
                 sales = Feed(key).AsEnumerable().Reverse().Take(20).Select(x => new { dish = x.Dish, price = x.Price, time = x.Time }),
                 menu, ingredients, lowStock, platesLeft,
@@ -671,8 +781,7 @@ internal static class Ledger
                     dish = soldNames.TryGetValue(kv.Key, out var n) ? n : kv.Key, count = kv.Value.count, revenue = kv.Value.revenue,
                     onMenu = menuEntries.Any(m => Key(m.Dish) == kv.Key),
                 }),
-                orders = active.Select(o => new { id = o.Id, dishes = o.Dishes.Select(NameOf).ToArray(), price = o.Price, prepared = o.Prepared, delivered = o.Delivered, done = false })
-                    .Concat(done.Select(d => new { id = d.id, dishes = d.dishes, price = d.price, prepared = d.dishes.Length, delivered = d.dishes.Length, done = true })),
+                orders,   // null when not shown: the page keeps what it had
                 staff, wagesDueToday = staff.Sum(x => x.dueToday),
                 rating = recent.Count > 0 ? Math.Round(recent.Average(r => r.Score), 2) : (double?)null,
                 reviews = reviews.TakeLast(30).Reverse().Select(r => new   // newest first
@@ -692,22 +801,62 @@ internal static class Ledger
                 popularity = Venues.PopularityOf(area),
             });
         }
-        // The player's inventory, valued.
-        var inventory = pocket.Where(kv => kv.Value.Qty > 0).Select(kv => new
-        {
-            key = kv.Key, name = kv.Value.Name ?? kv.Key, stock = kv.Value.Qty, average = kv.Value.Average,
-            stockValue = kv.Value.Value,
-            wastedToday = pocketWasted.TryGetValue(kv.Key, out var pw) ? pw.Qty : 0,
-            market = carried.TryGetValue(kv.Key, out var c) ? Market(c.item) : 0,
-            estimated = kv.Value.Batches.Any(x => x.Source is "estimated" or "opening" && !x.Edited),
-            batches = kv.Value.Batches.AsEnumerable().Reverse().Select(x => new { x.Id, x.Count, x.Unit, x.Source, x.Time, x.Edited }),
-        }).OrderBy(x => x.name).ToList();
+        if (!view) return null;
+        // The player's inventory, valued: the table only for a page showing it (the sidebar needs just count and value).
+        var pocketOpen = new HashSet<string>(views.Where(x => x.Venue == "pocket").SelectMany(x => x.Open)
+            .Where(k => k.StartsWith("pocket:")).Select(k => k[7..]));
+        object inventory = views.Any(x => x.Venue == "pocket") ? PocketRows(carried, pocketOpen) : null;
         return JsonSerializer.Serialize(new
         {
             day = GameTime.Day, time = Clock(), money = Economy.PlayerMoney, venues, inventory,
+            inventoryCount = pocket.Count(kv => kv.Value.Qty > 0),
             inventoryWastedToday = pocketWasted.Values.Sum(w => w.Value),
             inventoryValue = pocket.Values.Sum(l => l.Value),
         }, json);
+    }
+
+    // Past days don't change during a day, so they (and their receipt totals) are built once per venue per game day,
+    // when a page shows them: reading every receipt the game keeps is the heaviest thing the ledger does.
+    sealed class PastCache
+    {
+        public int Day;
+        public object days;
+        public Dictionary<string, Dictionary<string, (int amount, int count)>> venue, player;
+    }
+    static readonly Dictionary<string, PastCache> pastCache = new();
+
+    static PastCache History(VenueAreaGhost area, Book book, string key)
+    {
+        if (pastCache.TryGetValue(key, out var c) && c.Day == GameTime.Day) return c;
+        var all = Venues.ReceiptsOf(area).Where(r => r.Day < GameTime.Day).ToList();
+        playerReceipts = Venues.PlayerOwned.Count == 1
+            ? Economy.PlayerReceipts().Where(r => r.Day < GameTime.Day).ToList() : new List<ReceiptInfo>();
+        c = new PastCache
+        {
+            Day = GameTime.Day,
+            days = PastDays(book, all, key).TakeLast(30).Select(d => new { d.Day, d.Revenue, d.Ingredients, d.Wages, d.Rent, d.ByYou, d.YourSpending, d.Wasted, d.CostOfSales, d.Tracked, profit = d.Profit, d.Sales }).ToList(),
+            venue = Totals(all), player = Totals(playerReceipts),
+        };
+        pastCache[key] = c;
+        return c;
+    }
+
+    static Dictionary<string, Dictionary<string, (int amount, int count)>> Totals(List<ReceiptInfo> receipts) =>
+        receipts.GroupBy(r => r.Day).OrderBy(g => g.Key).ToDictionary(g => g.Key.ToString(),
+            g => g.GroupBy(r => r.Type).ToDictionary(t => t.Key, t => (t.Sum(r => r.Amount), t.Sum(r => r.Count))));
+
+    // Receipt totals by day and type, venue and player (to check the numbers against the game): past days from the
+    // cache, today live.
+    static object WithToday(PastCache past, List<ReceiptInfo> venueToday, List<ReceiptInfo> playerToday)
+    {
+        object Merge(Dictionary<string, Dictionary<string, (int amount, int count)>> pastDays, List<ReceiptInfo> today)
+        {
+            var all = pastDays.ToDictionary(kv => kv.Key, kv => kv.Value.ToDictionary(t => t.Key, t => new { amount = t.Value.amount, count = t.Value.count }));
+            foreach (var kv in Totals(today))
+                all[kv.Key] = kv.Value.ToDictionary(t => t.Key, t => new { amount = t.Value.amount, count = t.Value.count });
+            return all;
+        }
+        return new { venue = Merge(past.venue, venueToday), player = Merge(past.player, playerToday) };
     }
 
     // Past days: rebuilt from the venue's receipts as far back as the game keeps them, plus days the ledger saved at
@@ -750,15 +899,6 @@ internal static class Ledger
             YourSpending = Out(player.Where(r => r.Type == "Shop")),
         };
     }
-
-    // Receipt totals by day and type, venue and player (to check the numbers against the game).
-    static object ReceiptSummary(List<ReceiptInfo> venue, List<ReceiptInfo> player) => new
-    {
-        venue = venue.GroupBy(r => r.Day).OrderBy(g => g.Key).ToDictionary(g => g.Key.ToString(),
-            g => g.GroupBy(r => r.Type).ToDictionary(t => t.Key, t => new { amount = t.Sum(r => r.Amount), count = t.Sum(r => r.Count) })),
-        player = player.GroupBy(r => r.Day).OrderBy(g => g.Key).ToDictionary(g => g.Key.ToString(),
-            g => g.GroupBy(r => r.Type).ToDictionary(t => t.Key, t => new { amount = t.Sum(r => r.Amount), count = t.Sum(r => r.Count) })),
-    };
 
     // Every half hour of game time: today's level per ingredient, and used / received since the last sample.
     static void SampleStock(string venue, Dictionary<string, (ItemType item, int count)> stock)
@@ -847,15 +987,27 @@ internal static class Ledger
         try { return area?.Venue?.Guid ?? Venues.NameOf(area) ?? "venue"; } catch { return "venue"; }
     }
 
-    static string Key(ItemType item) => Items.NameOf(item) ?? "?";
+    // Item names come from the game each time (a native call and a new string), and the snapshot asks for the same
+    // few hundred over and over: kept per item (items are assets, so they last the session).
+    static readonly Dictionary<IntPtr, (string key, string name, int market)> names = new();
+
+    static (string key, string name, int market) Names(ItemType item)
+    {
+        if (item == null) return (null, null, 0);
+        if (names.TryGetValue(item.Pointer, out var n)) return n;
+        string key = Items.NameOf(item), shown = null;
+        int market = 0;
+        try { if (!string.IsNullOrWhiteSpace(item.Name)) shown = item.Name; } catch { }
+        try { market = (int)Math.Round(item.basePrice * 100f); } catch { }
+        n = (key, shown ?? key, market);
+        names[item.Pointer] = n;
+        return n;
+    }
+
+    static string Key(ItemType item) => Names(item).key ?? "?";
 
     // The name players see, else the asset name.
-    static string NameOf(ItemType item)
-    {
-        if (item == null) return null;
-        try { if (!string.IsNullOrWhiteSpace(item.Name)) return item.Name; } catch { }
-        return Items.NameOf(item);
-    }
+    static string NameOf(ItemType item) => Names(item).name;
 
     // Roles as the Staff tab names them: the game's jobs (Cooking -> Cook...) and mod jobs as they are (Bartender).
     static readonly Dictionary<string, string> JobNames = new()
@@ -906,7 +1058,7 @@ internal static class Ledger
         pocketWasted = saved?.PocketWasted ?? new();
         grown = saved?.Grown ?? new();
         nextBatchId = Math.Max(1, saved?.NextBatchId ?? 1);
-        feed.Clear(); openOrders.Clear(); doneOrders.Clear(); lastToday.Clear();
+        feed.Clear(); openOrders.Clear(); doneOrders.Clear(); lastToday.Clear(); pastCache.Clear(); names.Clear(); rowsCache.Clear();
         snapshotAt = 0f;
     }
 

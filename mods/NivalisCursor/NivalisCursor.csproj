@@ -4,7 +4,7 @@
     <Version>1.0.0</Version>
     <TsName>NivalisCursor</TsName>
     <TsDescription>A free mouse cursor on demand (scroll-wheel click by default, reassignable): movement and mouse-look pause until you press it again.</TsDescription>
-    <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
+    <TsWebsite>https://www.nexusmods.com/nivalisnights/mods/90</TsWebsite>
     <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>
   <ItemGroup>

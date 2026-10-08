@@ -4,7 +4,7 @@
     <Version>0.1.1</Version>
     <TsName>NivalisMinimap</TsName>
     <TsDescription>A satellite minimap and full district map with vendors, travel points, your venues and quests. Maps are made on your machine the first time you visit a district.</TsDescription>
-    <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
+    <TsWebsite>https://www.nexusmods.com/nivalisnights/mods/71</TsWebsite>
     <TsDependencies>$(KitDependency)</TsDependencies>
   </PropertyGroup>
   <ItemGroup>
