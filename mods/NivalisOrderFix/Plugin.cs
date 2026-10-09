@@ -13,11 +13,11 @@ namespace NivalisOrderFix;
 
 public enum SortMode { Vanilla, Cheapest, Local, Balanced }
 
-// The fix itself (buy what's needed and stop) is the kit's purchasing pipeline, which turns on when this mod adds a
-// VendorOrdering handler. This mod supplies the vendor order, and shows what it did: a page in the kit's Mods
+// The game buys what's needed from its vendor list; the kit's purchasing pipeline (on once this mod adds a
+// VendorOrdering handler) lets this mod set that list's order. It also shows what it did: a page in the kit's Mods
 // browser, a dev command, and an optional verbose log. Written as an example of a kit mod; see the README.
-[BepInPlugin(Guid, "Better Supplier Choice", "2.1.0")]   // formerly Manager Order Fix; GUID, config file and DLL name unchanged
-[BepInDependency(ModKit.Guid, ">=0.2.0")]
+[BepInPlugin(Guid, "Better Supplier Choice", "2.2.0")]   // formerly Manager Order Fix; GUID, config file and DLL name unchanged
+[BepInDependency(ModKit.Guid, ">=0.6.2")]   // the game's patch 4 restock
 public class Plugin : BasePlugin
 {
     const string Guid = "bgasm.nivalis.orderfix";
@@ -38,7 +38,7 @@ public class Plugin : BasePlugin
         // Settings. Every one is read when it's used, so changes apply live (in the kit's Mods browser, or by
         // saving the .cfg). The ranges make the browser show sliders.
         VendorSort = Config.Bind("General", "VendorSort", SortMode.Vanilla,
-            "Vendor order when filling an order. Vanilla: most stock first (the game's intent). " +
+            "Vendor order when filling an order. Vanilla: the game's order (cheapest first, then most stock). " +
             "Cheapest: lowest price first. Local: nearest district first. Balanced: weighs price, distance and stock.");
         DistanceWeight = Config.Bind("Balanced", "DistanceWeight", 0.07f, new ConfigDescription(
             "Balanced mode: price penalty per district hop. 0.07 = +7% per hop. " +
@@ -49,10 +49,10 @@ public class Plugin : BasePlugin
             new AcceptableValueRange<float>(0f, 10f)));
         Verbose = Config.Bind("Debug", "Verbose", false, new ConfigDescription(
             "Log every restock round: the vendors bought from, and each skipped vendor's price, stock and hops.",
-            null, new ModSetting { IsAdvanced = true }));
+            null, new ConfigurationManagerAttributes { IsAdvanced = true }));
         ModMenu.ListSettings(Guid);
 
-        // The fix: the kit's pipeline buys only what's needed, in the order this handler sets.
+        // The game buys what's needed, from vendors in the order this handler sets.
         Purchasing.VendorOrdering += OrderVendors;
         Purchasing.Decision += Record;
         GameEvents.BuyIngredientsFinished += FinishRound;
@@ -108,8 +108,7 @@ public class Plugin : BasePlugin
             case SortMode.Balanced:
                 ctx.Offers = list.OrderBy(Score).ThenByDescending(o => o.Stock).ThenBy(o => o.Sequence).ToList();
                 break;
-            default: // Vanilla
-                ctx.Offers = list.OrderByDescending(o => o.Stock).ThenBy(o => o.Sequence).ToList();
+            default: // Vanilla: the game's own order
                 break;
         }
     }
@@ -180,8 +179,7 @@ public class Plugin : BasePlugin
                           $"(price {o.Price}, stock {o.Stock}, hops {Hops(o)}, score {Score(o):0}) " +
                           $"[{VendorSort.Value}, {d.OfferCount} vendors]");
                 if (d.Result == PurchaseResult.Failed)
-                    L.LogInfo($"Purchase failed for {name} at {Economy.NameOf(o.Vendor)} " +
-                              "(likely out of money). Stopping this recipe's purchases.");
+                    L.LogInfo($"Purchase failed for {name} at {Economy.NameOf(o.Vendor)}; the game moves to the next vendor.");
             }
             Flush();
         }
@@ -191,8 +189,8 @@ public class Plugin : BasePlugin
 
     static readonly string[] ModeHelp =
     {
-        "Vanilla: the game's own order, most stock first.",
-        "Cheapest: lowest price first.",
+        "Vanilla: the game's own order, cheapest first, then most stock.",
+        "Cheapest: lowest price first (the same as the game's order now).",
         "Local: nearest district first.",
         "Balanced: price, weighed against distance and low stock.",
     };
@@ -221,7 +219,7 @@ public class Plugin : BasePlugin
         var diff = w.AddValue("Vs the game's order", Difference());
         if (diff != null)
             Ui.Tooltip(diff.transform.parent.gameObject,
-                "What the same amounts would have cost from the vendor the game picks first (most stock). " +
+                "What the same amounts would have cost from the vendor the game picks first (the cheapest). " +
                 "Local and Balanced can cost a little more: they trade price for nearer or better-stocked vendors.");
         w.AddText($"City venues ordered {today.NpcOrders} times today, also in this order.");
     }

@@ -12,9 +12,7 @@ The patch fixed it in the game: managers now keep a running total and stop when 
 
 ## What the mod does
 
-When a manager restocks an ingredient, the game walks its vendor list, most stock first, and buys until the order is filled. Better Supplier Choice lets the game work out how much to buy, then has the purchases made in the vendor order you choose. Managers still decide when to reorder and how much, and still buy fresh stock only.
-
-If a purchase fails, usually because the venue is out of money, that recipe's purchases stop, the same point where the game's own loop stops.
+When a manager restocks an ingredient, the game walks its vendor list and buys until the order is filled. Since the game's October 9 patch that list is cheapest first (then most stock); before, it was most stock first. Better Supplier Choice puts the list in the order you choose, and the game does the rest: managers still decide when to reorder and how much (the venue's supply target and restock budget), and still buy fresh stock only.
 
 The purchase handling lives in [Nivalis ModKit](https://github.com/BGASM/NivalisModKit), which this mod requires.
 
@@ -26,8 +24,8 @@ Change them in game: pause menu > **Mods** > Better Supplier Choice. Changes app
 
 | Mode | Order |
 |---|---|
-| `Vanilla` | Most stock first, the game's own order. Default. Same as not having the mod. |
-| `Cheapest` | Lowest price first. Most buying shifts to Calypso Island. |
+| `Vanilla` | The game's own order: cheapest first, then most stock. Default. Same as not having the mod. |
+| `Cheapest` | Lowest price first, then most stock. The same as the game's order since its October 9 patch. |
 | `Local` | Nearest district first. Your own district can be the most expensive. |
 | `Balanced` | Weighs price, distance and stock. |
 
@@ -48,7 +46,7 @@ Hops are counted over the game's travel graph, `WorldLocation.transitions`. Your
 Pause menu > **Mods** > **Better Supplier Choice** shows today's results for your venues:
 - the current mode, which you can switch there
 - how many ingredient orders the fix filled, and what they cost
-- the difference from the game's own vendor choice (Cheapest and Balanced usually save money; Local can cost a little more, for nearer vendors)
+- the difference from the game's own vendor choice (the game now picks the cheapest, so Local and Balanced can cost a little more, for nearer or better-stocked vendors)
 
 The counts restart each game day.
 
@@ -57,7 +55,7 @@ For mod developers, the dev command `orderfix` (`orderfix mode=Cheapest` to swit
 ## Requirements
 
 - BepInEx. See the [root README](../../README.md).
-- [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.2 or later.
+- [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.6.2 or later.
 
 ## Install
 
@@ -82,6 +80,12 @@ Other mods that change how managers buy ingredients through the kit's `Purchasin
 Tested on Nivalis Nights 1.0 patch 2 (Steam build 25680465) with BepInEx be.788. Without the patch, the over-buy bug is still corrected.
 
 ## Changes
+
+**2.2.0**
+- For the game's October 9 patch, which rewrote manager restocking: the game now buys from the cheapest vendor first, tops each ingredient up to the venue's supply target, and has a daily restock budget. Better Supplier Choice sets the order of that vendor list; the game does the rest.
+- `Vanilla` is now the game's new order (cheapest first, then most stock), and `Cheapest` matches it. `Local` and `Balanced` are the modes that change anything.
+- A failed purchase no longer stops the recipe's buying; the game moves to the next vendor.
+- Requires Nivalis ModKit 0.6.2.
 
 **2.1.0**
 - Renamed from Manager Order Fix to Better Supplier Choice. The GUID, settings file and `NivalisOrderFix.dll` are unchanged, so updating keeps your settings.
