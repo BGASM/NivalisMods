@@ -38,7 +38,7 @@ Pause menu > **Mods** > Nivalis Minimap. Changes apply immediately. They're stor
 | `FullMapKey` | F7 | Opens the full map. |
 | `ShowVendors` | on | Vendor badges. |
 | `ShowPlaces` | on | Places, your apartment and venues. |
-| `QuestMarkers` | Pinned | **Pinned** (quests you track), **All** (others dimmed), or **Off**. |
+| `QuestMarkers` | Pinned | **Pinned** (quests you track), **All** (others dimmed), or **Off**. The game's own *show only pinned quests* option also applies. |
 
 ## Installation
 
@@ -59,6 +59,10 @@ With the kit's dev console on, `minimap` lists the research tools: `minimap shot
 By BGASM. Built on [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) and BepInEx.
 
 ## Changes
+
+**0.1.2**
+- Quest markers follow the game's new "show only pinned quests" option (October 9 patch).
+- Requires Nivalis ModKit 0.6.2.
 
 **0.1.1**
 - Moves up above the venue info panel instead of covering it.

@@ -19,8 +19,8 @@ namespace NivalisMinimap;
 // Venues.Entrances, Quests.Markers. Dev command "minimap": the research tools it was built with (DevTools).
 public enum QuestMarkerMode { Pinned, All, Off }
 
-[BepInPlugin(Guid, "Nivalis Minimap", "0.1.1")]
-[BepInDependency(ModKit.Guid, ">=0.4.0")]   // Navigation, Photo, Player, World.Places, Quests.Markers...
+[BepInPlugin(Guid, "Nivalis Minimap", "0.1.2")]
+[BepInDependency(ModKit.Guid, ">=0.6.2")]   // Navigation, Photo, Player, World.Places, Quests.Markers (game pinned-only option)
 public class Plugin : BasePlugin
 {
     const string Guid = "bgasm.nivalis.minimap";
@@ -63,6 +63,7 @@ public class Plugin : BasePlugin
             "Places the compass points at: your apartment, shelters, venues, greenhouses, travel points, boats, trains and lifts, with its icons.");
         QuestMarkers = Config.Bind("Markers", "QuestMarkers", QuestMarkerMode.Pinned,
             "Quest objectives on the map: Pinned (the quests you track), All (others dimmed), or Off. " +
+            "The game's own 'show only pinned quests' option also applies. " +
             "Off the minimap's edge they sit on the rim, pointing the way; in another district, at the way there.");
         ToggleKey = Config.Bind("Minimap", "ToggleKey", "F6",
             "Key that hides and shows the minimap (a Unity Input System key name, e.g. F6, M, Backslash). Empty: none.");
@@ -71,9 +72,9 @@ public class Plugin : BasePlugin
         AvoidVenuePanel = Config.Bind("Layout", "AvoidVenuePanel", true,
             "Bottom-left corner: lift the minimap above the game's venue panel while it shows (at your venues).");
         MarginX = Config.Bind("Layout", "MarginX", 28f, new ConfigDescription("Distance from the screen's side.",
-            new AcceptableValueRange<float>(0f, 600f), new ModSetting { IsAdvanced = true }));
+            new AcceptableValueRange<float>(0f, 600f), new ConfigurationManagerAttributes { IsAdvanced = true }));
         MarginY = Config.Bind("Layout", "MarginY", 28f, new ConfigDescription("Distance from the screen's top or bottom.",
-            new AcceptableValueRange<float>(0f, 600f), new ModSetting { IsAdvanced = true }));
+            new AcceptableValueRange<float>(0f, 600f), new ConfigurationManagerAttributes { IsAdvanced = true }));
         Style.SettingChanged += (_, _) => Hud.Rebuild();
         CutHeight.SettingChanged += (_, _) => { if (Style.Value == MapStyle.Cut) Hud.Rebuild(); };
         ToggleKey.SettingChanged += (_, _) => ReadToggleKey();
