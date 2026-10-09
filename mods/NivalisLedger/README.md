@@ -35,6 +35,6 @@ Days from before you installed the Ledger only have what the game's receipts kep
 
 ## Installation
 
-Needs BepInEx 6 (IL2CPP, be.788) and [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.6.1 or later. Extract the zip into the game folder: `BepInEx\plugins\NivalisLedger.dll`.
+Needs BepInEx 6 (IL2CPP, be.788) and [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.6.2 or later. Extract the zip into the game folder: `BepInEx\plugins\NivalisLedger.dll`.
 
 The Ledger's records are kept with each save.

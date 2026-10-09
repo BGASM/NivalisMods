@@ -656,7 +656,7 @@ internal static class Ledger
             var soldNames = receipts.Where(r => r.Type == "Restaurant" && r.Dish != null)
                 .GroupBy(r => Key(r.Dish)).ToDictionary(g => g.Key, g => NameOf(g.First().Dish) ?? g.Key);
 
-            var menuEntries = Venues.MenuOf(area).Select(MenuDish.Of).ToList();
+            var menuEntries = Venues.MenuOf(area).Select(m => MenuDish.Of(m, area.Venue)).ToList();
             var costsNow = new Dictionary<string, int>();
             var menu = menuEntries.Select(m =>
             {
@@ -1028,22 +1028,26 @@ internal static class Ledger
         comfort = Math.Round(r.Comfort, 2), allFoodDelivered = r.AllFoodDelivered, reaction = r.Reaction,
     };
 
-    // A menu dish with the ingredients the kitchen actually uses. Customizing a recipe (another meat, another way of
-    // cooking it) puts a new recipe in the game's recipe table, which the kitchen cooks from; the menu entry keeps the
-    // recipe it was added with, and that is what Venues.MenuOf (kit 0.6.1) reads. So: the table's current recipe.
+    // A menu dish with the ingredients the kitchen actually uses. Since the game's Oct 9 patch a customized recipe
+    // (another meat, another way of cooking it) applies only to the player's venues: the venue's recipe comes from
+    // MealDatabase.GetVenueRecipe(definition, venue). Before that patch customizing replaced the one global recipe
+    // (GetMealRecipeFromItemType), while the menu entry, which kit 0.6.1's Venues.MenuOf reads, kept the original.
     sealed class MenuDish
     {
         public ItemType Dish;
         public int Price;
         public List<(ItemType Item, int Amount)> Ingredients;
 
-        internal static MenuDish Of(MenuEntry m)
+        internal static MenuDish Of(MenuEntry m, Nivalis.GhostSystem.CustomerLoop.Venue venue)
         {
             var d = new MenuDish { Dish = m.Dish, Price = m.Price, Ingredients = m.Ingredients.ToList() };
             try
             {
                 var db = Nivalis.CraftingSystem.MealDatabase.Instance;
-                var inputs = m.Dish != null ? db?.GetMealRecipeFromItemType(m.Dish)?.Inputs : null;
+                Nivalis.CraftingSystem.IRecipe recipe = null;
+                try { recipe = VenueRecipe(db, m, venue); } catch (MissingMethodException) { }   // an older game build
+                if (recipe == null && m.Dish != null) recipe = db?.GetMealRecipeFromItemType(m.Dish);
+                var inputs = recipe?.Inputs;
                 if (inputs != null && inputs.Length > 0)
                 {
                     var list = new List<(ItemType Item, int Amount)>();
@@ -1054,6 +1058,14 @@ internal static class Ledger
             }
             catch { }
             return d;
+        }
+
+        // Kept apart so an older game build (without GetVenueRecipe) only fails here, inside the try above.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        static Nivalis.CraftingSystem.IRecipe VenueRecipe(Nivalis.CraftingSystem.MealDatabase db, MenuEntry m, Nivalis.GhostSystem.CustomerLoop.Venue venue)
+        {
+            var def = m.Recipe?.BaseDefinition;
+            return def != null && venue != null ? db?.GetVenueRecipe(def, venue) : null;
         }
     }
 
