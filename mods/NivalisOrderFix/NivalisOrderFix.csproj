@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>NivalisOrderFix</AssemblyName>
-    <Version>2.1.0</Version>
+    <Version>2.2.0</Version>
     <TsName>BetterSupplierChoice</TsName>
     <TsDescription>Choose which vendors your managers buy ingredients from: cheapest, nearest, or a balance of price, distance and stock. Settings in the Mods menu.</TsDescription>
     <TsWebsite>https://www.nexusmods.com/nivalisnights/mods/4</TsWebsite>

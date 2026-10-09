@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>NivalisLedger</AssemblyName>
-    <Version>0.1.4</Version>
+    <Version>0.1.5</Version>
     <TsName>NivalisLedger</TsName>
     <TsDescription>A live profit tracker for your venues in your browser: sales, plate costs and margins, ingredient stock and its value, pending orders, staff pay and reviews.</TsDescription>
     <TsWebsite>https://www.nexusmods.com/nivalisnights/mods/86</TsWebsite>

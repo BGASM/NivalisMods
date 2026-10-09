@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>NivalisBartender</AssemblyName>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <TsName>NivalisBartender</TsName>
     <TsDescription>A Bartender job for your venue staff: bartenders prep and plate the drinks, cooks stick to food. Drinks can use cooking, serving or both skills. Frees your kitchen when beer is half of every order.</TsDescription>
     <TsWebsite>https://www.nexusmods.com/nivalisnights/mods/98</TsWebsite>

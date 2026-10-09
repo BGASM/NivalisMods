@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>NivalisOrderFixStandalone</AssemblyName>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <TsName>BetterSupplierChoice_Standalone</TsName>
     <TsDescription>Better Supplier Choice without Nivalis ModKit: choose the order managers buy from vendors. Install this or the kit edition, not both.</TsDescription>
     <TsWebsite>https://github.com/BGASM/NivalisMods</TsWebsite>
