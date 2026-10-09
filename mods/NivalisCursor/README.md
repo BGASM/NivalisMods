@@ -10,4 +10,4 @@ Pause menu > **Mods** > Nivalis Cursor > `Button` (default `Middle`, the scroll-
 
 ## Installation
 
-Needs BepInEx 6 (IL2CPP, be.788) and [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.2.0 or later. Extract the zip into the game folder: `BepInEx\plugins\NivalisCursor.dll`.
+Needs BepInEx 6 (IL2CPP, be.788) and [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.6.2 or later (the version for the game's October 9 patch; Cursor itself works with any kit from 0.2). Extract the zip into the game folder: `BepInEx\plugins\NivalisCursor.dll`.
