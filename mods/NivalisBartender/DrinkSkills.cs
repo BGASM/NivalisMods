@@ -7,21 +7,19 @@ namespace NivalisBartender;
 // Which of a bartender's skills makes their drinks.
 public enum DrinkSkill
 {
-    Mixed,     // prep from cooking, plating (quality, speed, XP) from serving; needs both skills
+    Mixed,     // prep from cooking, plating (quality, XP) from serving; needs both skills
     Cooking,   // everything from cooking, as for any cook in the game
     Serving,   // everything from serving
 }
 
 // In the game a meal's quality is set when it's plated: the plater's cooking PreparationQuality times their happiness
-// influence, and plating gives them 1 cooking XP. Each step's time is scaled by the cooking ActionSpeed (a time
-// multiplier). For drinks made by a bartender, this swaps in the serving skill where the setting says so: the same
-// happiness influence times ServingLevel.ServiceQuality (the value a waiter's service adds to a review), time scaled
-// by 1 / serving ActionSpeed (a speed), XP to serving. Drink prep also gives the bartender XP (DrinkPrepXp per drink,
+// influence, and plating gives them 1 cooking XP. Prep time is scaled by the cook's cooking time (StaffSkills.CookingTime,
+// a multiplier); plating takes a flat 6 seconds for everyone. For drinks made by a bartender, this swaps in the serving
+// skill where the setting says so: the same happiness influence times ServingLevel.ServiceQuality (the value a waiter's
+// service adds to a review), prep time scaled by 1 / serving ActionSpeed (a speed), XP to serving. Drink prep also gives the bartender XP (DrinkPrepXp per drink,
 // split across its prep steps), which the game gives no one for prep. The kit's Kitchen events carry it out.
 static class DrinkSkills
 {
-    const float NoSkillTime = 1.2f;   // the game's cooking time for someone without the skill
-
     // The setting as last committed: a change applies when the settings menu closes, so trying values on the way
     // doesn't take the job off people at every click (and going back to the old value changes nothing).
     static DrinkSkill? committed;
@@ -87,20 +85,19 @@ static class DrinkSkills
 
     static bool Applies(Person p, bool isDrink) => isDrink && Bartenders.Active(p);
 
-    // Time multipliers (lower is faster), as the game applies cooking's ActionSpeed.
-    static float CookTime(Person p) => StaffSkills.CookingOf(p)?.ActionSpeed ?? NoSkillTime;
-
+    // Prep time multipliers (lower is faster): the game's for cooking, the serving speed's inverse for serving.
     static float ServeTime(Person p)
     {
         var s = StaffSkills.ServingOf(p);
-        return s != null && s.ActionSpeed > 0f ? 1f / s.ActionSpeed : NoSkillTime;
+        return s != null && s.ActionSpeed > 0f ? 1f / s.ActionSpeed : StaffSkills.NoSkillTime;
     }
 
+    // Serving-mode prep runs at the serving skill's pace. Plating is a flat 6 seconds in the game, left as it is.
     static void StepStarting(KitchenStepContext ctx)
     {
-        if (!Applies(ctx.Person, ctx.IsDrink)) return;
-        bool serving = ctx.Step == KitchenStep.Plating ? Mode != DrinkSkill.Cooking : Mode == DrinkSkill.Serving;
-        if (serving) ctx.TimeScale *= ServeTime(ctx.Person) / CookTime(ctx.Person);
+        if (ctx.Step != KitchenStep.Prep || Mode != DrinkSkill.Serving || !Applies(ctx.Person, ctx.IsDrink)) return;
+        float cook = StaffSkills.CookingTime(ctx.Person);
+        if (cook > 0f) ctx.TimeScale *= ServeTime(ctx.Person) / cook;
     }
 
     static void MealPlated(MealPlatedContext ctx)

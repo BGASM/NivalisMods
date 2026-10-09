@@ -18,8 +18,8 @@ namespace NivalisBartender;
 //
 // The kit does the game-facing work: the job in the staff tab and its save safety (StaffJobs), letting bartenders
 // take kitchen jobs and choosing among the waiting ones (Kitchen.MayWork / FilterJobs). This mod only decides.
-[BepInPlugin(Guid, "Nivalis Bartender", "1.0.0")]
-[BepInDependency(ModKit.Guid, ">=0.6.0")]   // StaffJobs, Kitchen, StaffSkills
+[BepInPlugin(Guid, "Nivalis Bartender", "1.0.1")]
+[BepInDependency(ModKit.Guid, ">=0.6.2")]   // StaffJobs, Kitchen, StaffSkills (CookingTime)
 public class Plugin : BasePlugin
 {
     internal const string Guid = "bgasm.nivalis.bartender";
@@ -38,13 +38,15 @@ public class Plugin : BasePlugin
             "Cooks without the Bartender job help with drink prep (blending, etc.) when there's no food prep for them, even with a " +
             "bartender on shift. Plating drinks stays with bartenders.");
         DrinkSkill = Config.Bind("General", "DrinkSkill", NivalisBartender.DrinkSkill.Mixed,
-            "Which skills make a bartender's drinks, and who may tend bar. Mixed: prep from cooking, plating (quality, speed, XP) " +
+            "Which skills make a bartender's drinks, and who may tend bar. Mixed: prep from cooking, plating (quality, XP) " +
             "from serving; needs both skills. Cooking: all from cooking, as in the game. Serving: all from serving.");
         DrinkPrepXp = Config.Bind("General", "DrinkPrepXp", 0.5f, new ConfigDescription(
             "XP a bartender gets for the prep of one drink (the game gives none for prep), split across the drink's prep steps. " +
             "Goes to cooking, or serving with DrinkSkill = Serving. Plating a drink gives 1, as in the game.",
             new AcceptableValueRange<float>(0f, 2f)));
-        Verbose = Config.Bind("Debug", "Verbose", false, "Log changes in who takes which jobs, and each drink a bartender plates.");
+        Verbose = Config.Bind("Debug", "Verbose", false, new ConfigDescription(
+            "Log changes in who takes which jobs, and each drink a bartender plates.", null,
+            new ConfigurationManagerAttributes { IsAdvanced = true }));
         ModMenu.ListSettings(Guid);
 
         StaffJobs.Register(new StaffJob

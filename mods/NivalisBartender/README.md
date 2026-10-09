@@ -16,13 +16,13 @@ Bartender counts as a job, so a dedicated bartender can have Cook switched off. 
 
 Bartending is part kitchen, part service. The `DrinkSkill` setting decides which of a worker's skills count, and who may tend bar:
 
-| `DrinkSkill` | Who can be a bartender | Drink prep | Drink plating (quality, speed, XP) | Badge |
+| `DrinkSkill` | Who can be a bartender | Drink prep (speed) | Drink plating (quality, XP) | Badge |
 |---|---|---|---|---|
 | **Mixed** (default) | staff with cooking **and** serving | cooking | serving | serving/cooking, e.g. `3/1` |
 | **Cooking** | anyone who can cook | cooking | cooking (as in the game) | cooking level |
 | **Serving** | anyone who can wait tables | serving | serving | serving level |
 
-In the game a dish's quality comes from whoever plates it: their cooking level times how happy they are. With serving, the same happiness counts, times their serving level's service quality (the value a waiter's service adds to reviews). Meal quality counts toward review scores, so a skilled, happy bartender means better reviews from drinks.
+In the game a dish's quality comes from whoever plates it: their cooking level times how happy they are. With serving, the same happiness counts, times their serving level's service quality (the value a waiter's service adds to reviews). Meal quality counts toward review scores, so a skilled, happy bartender means better reviews from drinks. Plating takes the same 6 seconds for everyone, as in the game.
 
 Bartenders also earn XP for drink prep, which the game gives no one for prep: `DrinkPrepXp` per drink (0.5 by default), however many prep steps it has. Plating gives 1, as in the game. Beer has no prep; drinks like Galaxy Lemonade (blender) do.
 
@@ -47,8 +47,18 @@ Safe. A bartender with no other job is saved with a stand-in game job (Cook if t
 
 ## Installation
 
-Needs BepInEx 6 (IL2CPP, be.788) and [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.6.0 or later. Extract the zip into the game folder: `BepInEx\plugins\NivalisBartender.dll`.
+Needs BepInEx 6 (IL2CPP, be.788) and [Nivalis ModKit](https://github.com/BGASM/NivalisModKit) 0.6.2 or later. Extract the zip into the game folder: `BepInEx\plugins\NivalisBartender.dll`.
 
 ## For modders
 
 The job, its save safety and the kitchen hooks come from the kit (`StaffJobs`, `Kitchen`, `StaffSkills`); this mod only makes the decisions. See the kit's [Staff and kitchen](https://github.com/BGASM/NivalisModKit#staff-and-kitchen-experimental-kit-060) section.
+
+## Changes
+
+**1.0.1**
+- For the game's October 9 patch. Plating takes a flat 6 seconds in the game now, so drink plating is no longer sped up or slowed down; Serving-mode drink prep runs at the serving skill's pace against the game's new cooking time.
+- `Verbose` is an advanced setting (shown under Advanced in Mod Settings Menu).
+- Requires Nivalis ModKit 0.6.2.
+
+**1.0.0**
+- First release.
