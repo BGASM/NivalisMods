@@ -10,11 +10,11 @@ This is the standalone edition of [Better Supplier Choice](../NivalisOrderFix). 
 
 Before the game's first patch (October 1, 2026), managers bought the full order from every vendor that stocked an ingredient. Needed 5 potatoes, bought 10. Version 1.0, as Manager Order Fix, existed to fix that.
 
-The patch fixed it in the game: managers now keep a running total and stop when the order is filled. From 1.1, Better Supplier Choice leaves quantities to the game and only changes the vendor order. **1.1 requires the patched game.** On an unpatched copy, keep 1.0.
+The patch fixed it in the game: managers now keep a running total and stop when the order is filled. From 1.1, Better Supplier Choice leaves quantities to the game and only changes the vendor order. **1.2 requires the game's October 9 patch**; 1.1 is for the builds before it.
 
 ## What the mod does
 
-When a manager restocks an ingredient, the game lists the vendors that stock it, most stock first, and buys down that list until the order is filled. Better Supplier Choice re-sorts the list in the order you choose before the manager starts. Everything else is the game's own logic: when to reorder, how much, fresh stock only, the budget, and stopping when the venue runs out of money.
+When a manager restocks an ingredient, the game lists the vendors that stock it, cheapest first (then most stock; most stock first before the October 9 patch), and buys down that list until the order is filled. Better Supplier Choice re-sorts the list in the order you choose before the manager starts. Everything else is the game's own logic: when to reorder, how much, fresh stock only, the restock budget, and stopping when the venue runs out of money.
 
 Only ingredient buying is affected. Furniture purchases use the game's own order.
 
@@ -26,8 +26,8 @@ Only ingredient buying is affected. Furniture purchases use the game's own order
 
 | Mode | Order |
 |---|---|
-| `Vanilla` | Most stock first, the game's own order. Default. Same as not having the mod. |
-| `Cheapest` | Lowest price first. Most buying shifts to Calypso Island. |
+| `Vanilla` | The game's own order: cheapest first, then most stock. Default. Same as not having the mod. |
+| `Cheapest` | Lowest price first, then most stock. The same as the game's order since its October 9 patch. |
 | `Local` | Nearest district first. Your own district can be the most expensive. |
 | `Balanced` | Weighs price, distance and stock. |
 
@@ -68,9 +68,15 @@ Works alongside Use Oldest First.
 
 Don't combine with the ModKit edition of Better Supplier Choice, or with other mods that reorder managers' vendors. Mods that use the kit's `Purchasing` API need the ModKit edition instead.
 
-Tested on Nivalis Nights 1.0 (first patch, October 1, 2026) with BepInEx be.788.
+Built for Nivalis Nights 1.0 (October 9, 2026 patch) with BepInEx be.788.
 
 ## Changes
+
+**1.2.0**
+- For the game's October 9 patch, which changed the vendor list (it now carries each vendor's price and is sorted cheapest first). 1.1 doesn't sort on this patch.
+- `Vanilla` is now the game's new order, cheapest first. `Cheapest` matches it.
+- Verbose logging: one line per vendor bought from, failed purchases (the game now moves on to the next vendor), and one per run of vendors not used. It is an advanced setting in settings menus such as Mod Settings Menu.
+- Balanced weights have ranges, so settings menus show sliders.
 
 **1.1.0**
 - Renamed from Manager Order Fix (Standalone) to Better Supplier Choice (Standalone). The GUID, settings file and DLL name are unchanged.
