@@ -12,7 +12,7 @@ BepInEx plugins for Nivalis Nights, by BGASM.
 | [Nivalis Staff Order](mods/NivalisStaffOrder) | Up and down arrows on your venue's staff list, to put your staff in the order you like. Display only. | Nivalis ModKit 0.2 |
 | [Nivalis Time Speed](mods/NivalisTimeSpeed) | Run the in-game clock at 0.5x, 1x or 2x. | Nivalis ModKit 0.2 |
 | [Nivalis Cursor](mods/NivalisCursor) | A free mouse cursor on demand (scroll-wheel click by default): movement and mouse-look pause until you press it again. | Nivalis ModKit 0.6.2 |
-| [Nivalis Borderless](mods/NivalisBorderless) | Borderless windowed mode at your monitor's resolution, which the game's settings don't offer. | |
+| [Nivalis Borderless](mods/NivalisBorderless) | Keeps the game on screen when you click another window: the game's Fullscreen Window mode, without the minimising. | |
 | [Better Supplier Choice (Standalone)](mods/NivalisOrderFixStandalone) | The same vendor order without the kit. Install one edition, not both. | |
 | [Use Oldest First](mods/NivalisFifo) | **Retired.** Game patch 2 made it unnecessary: the game now uses its least-fresh stock first. Kept for reference. | |
 

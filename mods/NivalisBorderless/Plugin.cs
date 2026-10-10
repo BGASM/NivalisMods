@@ -9,11 +9,13 @@ using UnityEngine;
 
 namespace NivalisBorderless;
 
-// Borderless windowed mode, which the game's settings don't offer: a normal window at the monitor's resolution with its
-// title bar and border removed, covering the monitor. (Unity's own "fullscreen window" minimizes when the game loses
-// focus in this build; a plain window doesn't.) The game applies its own screen setting when it starts, so this checks
-// every 2 seconds and applies again if the window changed back. No kit needed.
-[BepInPlugin("bgasm.nivalis.borderless", "Nivalis Borderless", "1.0.0")]
+// Keeps the game on screen when you click another window. Since patch 4 the game's own Display Mode has
+// "Fullscreen Window": a borderless window at the monitor's resolution, but Unity minimizes it as soon as the game
+// loses focus. 1.0 made its own borderless window instead, which fights the game's new setting (the window kept
+// changing back, and froze the game for some players). This version leaves the game's mode alone: in Fullscreen
+// Window it stops Unity from hearing that the game lost focus, so it never minimizes. Windowed and Exclusive
+// Fullscreen are left as the game makes them. No kit needed.
+[BepInPlugin("bgasm.nivalis.borderless", "Nivalis Borderless", "1.0.1")]
 public class Plugin : BasePlugin
 {
     internal static ConfigEntry<bool> Enabled;
@@ -23,7 +25,7 @@ public class Plugin : BasePlugin
     {
         L = Log;
         Enabled = Config.Bind("General", "Enabled", true,
-            "Keep the game borderless windowed at your monitor's resolution. Off: the game's own screen setting applies (after a restart).");
+            "Keep the game on screen when you click another window. Set the game's Display Mode to Fullscreen Window.");
         AddComponent<BorderlessBehaviour>();
     }
 }
@@ -32,53 +34,56 @@ internal class BorderlessBehaviour : MonoBehaviour
 {
     public BorderlessBehaviour(IntPtr ptr) : base(ptr) { }
 
-    float checkAt = 3f;   // after the game has applied its own setting
-    int applied;
-    bool reportedError;
-    IntPtr window;
+    // The game window's message handler is replaced once; the delegate must stay alive while it's installed.
+    static WndProc hook;
+    static IntPtr original, window;
+    static bool active;            // Fullscreen Window and enabled: focus loss is hidden from Unity
+    static bool reportedError;
+    float checkAt = 2f;
+    FullScreenMode lastMode = (FullScreenMode)(-1);
 
     public void Update()
     {
-        if (!Plugin.Enabled.Value || Time.unscaledTime < checkAt) return;
-        checkAt = Time.unscaledTime + 2f;
+        if (Time.unscaledTime < checkAt) return;
+        checkAt = Time.unscaledTime + 1f;
         try
         {
-            if (window == IntPtr.Zero) window = FindGameWindow();
-            if (window == IntPtr.Zero) return;
-            var m = MonitorRect(window);
-            int w = m.Right - m.Left, h = m.Bottom - m.Top;
-
-            // First a plain window at the monitor's size; the border comes off on the next check. Only the mode is
-            // checked here: right after the border comes off Unity briefly reports the old framed size, and resizing
-            // through Unity then would put the border back. The window's size is kept with Windows below.
-            if (Screen.fullScreenMode != FullScreenMode.Windowed)
+            if (window == IntPtr.Zero)
             {
-                Log($"window {w}x{h} (was {Screen.fullScreenMode} {Screen.width}x{Screen.height})");
-                Screen.SetResolution(w, h, FullScreenMode.Windowed);
-                return;
+                window = FindGameWindow();
+                if (window == IntPtr.Zero) return;
+                hook = Hook;
+                original = SetWindowLongPtr(window, GWLP_WNDPROC, Marshal.GetFunctionPointerForDelegate(hook));
+                if (original == IntPtr.Zero) throw new Exception($"could not hook the game window (error {Marshal.GetLastWin32Error()})");
             }
 
-            long style = GetWindowLongPtr(window, GWL_STYLE).ToInt64();
-            GetWindowRect(window, out var r);
-            bool bordered = (style & Frame) != 0;
-            bool placed = r.Left == m.Left && r.Top == m.Top && r.Right == m.Right && r.Bottom == m.Bottom;
-            if (!bordered && placed) return;
-
-            Log($"removing the border at {m.Left},{m.Top} {w}x{h}");
-            if (bordered) SetWindowLongPtr(window, GWL_STYLE, new IntPtr(style & ~Frame));
-            SetWindowPos(window, IntPtr.Zero, m.Left, m.Top, w, h, SWP_FRAMECHANGED | SWP_NOZORDER | SWP_SHOWWINDOW);
+            var mode = Screen.fullScreenMode;
+            active = Plugin.Enabled.Value && mode == FullScreenMode.FullScreenWindow;
+            if (mode != lastMode)
+            {
+                lastMode = mode;
+                Plugin.L.LogInfo(active
+                    ? "Borderless: Fullscreen Window: the game stays on screen when you click another window"
+                    : $"Borderless: Display Mode is {mode}: left as the game makes it" +
+                      (Plugin.Enabled.Value ? " (choose Fullscreen Window in the game's settings)" : " (mod disabled)"));
+            }
         }
         catch (Exception e)
         {
-            if (!reportedError) { reportedError = true; Plugin.L.LogWarning($"Borderless: {e.Message} (retrying every 2 s)"); }
+            if (!reportedError) { reportedError = true; Plugin.L.LogWarning($"Borderless: {e.Message}"); }
         }
     }
 
-    // Logged the first few times, then rarely: something applying its own mode again and again shows up here.
-    void Log(string what)
+    // Unity minimizes a Fullscreen Window when it's told the app lost focus. While active, those messages stop here;
+    // everything else, and gaining focus, goes to Unity as normal.
+    static IntPtr Hook(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
-        applied++;
-        if (applied <= 4 || applied % 30 == 0) Plugin.L.LogInfo($"Borderless: {what} (time {applied})");
+        if (active)
+        {
+            if (msg == WM_ACTIVATEAPP && wParam == IntPtr.Zero) return IntPtr.Zero;
+            if (msg == WM_ACTIVATE && ((long)wParam & 0xFFFF) == WA_INACTIVE) return IntPtr.Zero;
+        }
+        return CallWindowProc(original, hwnd, msg, wParam, lParam);
     }
 
     static IntPtr FindGameWindow()
@@ -97,30 +102,17 @@ internal class BorderlessBehaviour : MonoBehaviour
         return found;
     }
 
-    static RECT MonitorRect(IntPtr hwnd)
-    {
-        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
-        GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), ref info);
-        return info.rcMonitor;
-    }
-
     // ---------- Win32 ----------
-    const int GWL_STYLE = -16;
-    const long Frame = 0x00C00000L /*WS_CAPTION*/ | 0x00040000L /*WS_THICKFRAME*/ | 0x00080000L /*WS_SYSMENU*/
-                     | 0x00020000L /*WS_MINIMIZEBOX*/ | 0x00010000L /*WS_MAXIMIZEBOX*/;
-    const uint SWP_NOZORDER = 0x0004, SWP_FRAMECHANGED = 0x0020, SWP_SHOWWINDOW = 0x0040;
-    const uint MONITOR_DEFAULTTONEAREST = 2;
+    const int GWLP_WNDPROC = -4;
+    const uint WM_ACTIVATE = 0x0006, WM_ACTIVATEAPP = 0x001C;
+    const long WA_INACTIVE = 0;
 
-    [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    delegate IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
     delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
-    [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
-    [DllImport("user32.dll")] static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
-    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
-    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
-    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
-    [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
+    [DllImport("user32.dll", SetLastError = true)] static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
+    [DllImport("user32.dll")] static extern IntPtr CallWindowProc(IntPtr prev, IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
